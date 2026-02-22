@@ -4,7 +4,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { authMiddleware } from '../middleware/auth.js';
 
 const prisma = new PrismaClient();
@@ -219,7 +219,7 @@ contentsRouter.post(
           content: body.content,
           language: body.language,
           formats: body.formats || ['markdown'],
-          metadata: body.metadata || {},
+          metadata: (body.metadata || {}) as Prisma.InputJsonValue,
           author_id: userId,
           status: 'draft',
         },
@@ -294,7 +294,7 @@ contentsRouter.put(
             ...(body.type && { type: body.type }),
             ...(body.language && { language: body.language }),
             ...(body.formats && { formats: body.formats }),
-            ...(body.metadata && { metadata: body.metadata }),
+            ...(body.metadata && { metadata: body.metadata as Prisma.InputJsonValue }),
           },
         }),
         prisma.content_versions.create({

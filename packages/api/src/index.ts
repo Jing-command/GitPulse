@@ -16,6 +16,7 @@ import { contentsRouter } from './routes/contents.js';
 import { commitsRouter } from './routes/commits.js';
 import { usersRouter } from './routes/users.js';
 import { healthRouter } from './routes/health.js';
+import { statsRouter } from './routes/stats.js';
 
 // 创建 Express 应用
 const app = express();
@@ -75,6 +76,7 @@ app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/contents', contentsRouter);
 app.use('/api/v1/commits', commitsRouter);
 app.use('/api/v1/users', usersRouter);
+app.use('/api/v1/stats', statsRouter);
 
 // 错误处理
 app.use(notFoundHandler);

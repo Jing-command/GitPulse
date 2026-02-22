@@ -10,6 +10,7 @@ const config: Options = {
     'doc-sync': 'src/doc-sync/index.ts',
     'seo': 'src/seo/index.ts',
     'ai': 'src/ai/index.ts',
+    'git-service': 'src/git-service.ts',
   },
   format: ['esm'],
   dts: true,

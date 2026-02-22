@@ -109,8 +109,20 @@ export const api = {
   /**
    * GET 请求
    */
-  get: <T>(endpoint: string, options?: RequestInit) =>
-    request<T>(endpoint, { ...options, method: 'GET' }),
+  get: <T>(endpoint: string, params?: Record<string, unknown>, options?: RequestInit) => {
+    // 构建带查询参数的 URL
+    let url = endpoint;
+    if (params && Object.keys(params).length > 0) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, String(value));
+        }
+      });
+      url = `${endpoint}?${searchParams.toString()}`;
+    }
+    return request<T>(url, { ...options, method: 'GET' });
+  },
 
   /**
    * POST 请求
@@ -206,6 +218,8 @@ export const projectsAPI = {
         name: string;
         description: string | null;
         repo_url: string;
+        status: string;
+        avatar_index: number;
         config: Record<string, unknown> | null;
         commits_count: number;
         contents_count: number;
@@ -360,6 +374,186 @@ export const contentsAPI = {
         published_at: string | null;
       };
     }>(`/api/v1/contents/${id}`),
+};
+
+/**
+ * 项目相关 API（扩展）
+ */
+export const projectsExtendedAPI = {
+  /**
+   * 获取项目分支列表
+   */
+  getBranches: (projectId: string) =>
+    api.get<{
+      branches: Array<{
+        name: string;
+        label: string;
+        current: boolean;
+      }>;
+    }>(`/api/v1/projects/${projectId}/branches`),
+
+  /**
+   * 获取项目实时提交历史（从 Git 仓库）
+   */
+  getGitCommits: (
+    projectId: string,
+    params?: {
+      branch?: string;
+      page?: number;
+      per_page?: number;
+    }
+  ) =>
+    api.get<{
+      items: Array<{
+        hash: string;
+        message: string;
+        author: string;
+        author_email: string;
+        date: string;
+      }>;
+      total: number;
+      page: number;
+      per_page: number;
+      total_pages: number;
+      branch: string;
+    }>(`/api/v1/projects/${projectId}/git-commits`, params),
+
+  /**
+   * 同步项目 commits（从 GitHub 拉取最新）
+   */
+  syncCommits: (projectId: string) =>
+    api.post<{
+      status: string;
+      message: string;
+    }>(`/api/v1/projects/${projectId}/sync`),
+};
+
+/**
+ * 统计数据相关 API
+ */
+export const statsAPI = {
+  /**
+   * 获取仪表板统计数据
+   */
+  getDashboardStats: () =>
+    api.get<{
+      stats: {
+        projects: {
+          total: number;
+          this_week: number;
+        };
+        contents: {
+          total: number;
+          this_week: number;
+        };
+        commits: {
+          total: number;
+          this_week: number;
+        };
+        seo_score: {
+          average: number;
+          this_week_change: number;
+        };
+      };
+      recent_activities: Array<{
+        type: 'content' | 'commit' | 'project';
+        title: string;
+        description: string;
+        time: string;
+      }>;
+    }>('/api/v1/stats/dashboard'),
+};
+
+/**
+ * Commits 相关 API
+ */
+export const commitsAPI = {
+  /**
+   * 获取 commit 列表
+   */
+  getCommits: (projectId: string, page = 1, per_page = 20) =>
+    api.get<{
+      items: Array<{
+        id: string;
+        project_id: string;
+        hash: string;
+        message: string;
+        author: string;
+        author_email: string;
+        impact_level: string;
+        summary: unknown;
+        timestamp: string;
+      }>;
+      total: number;
+      page: number;
+      per_page: number;
+      total_pages: number;
+    }>('/api/v1/commits', { project_id: projectId, page, per_page }),
+
+  /**
+   * 触发 commit 分析
+   */
+  analyzeCommits: (
+    projectId: string,
+    body?: {
+      from?: string;
+      to?: string;
+      incremental?: boolean;
+    }
+  ) =>
+    api.post<{
+      task_id: string;
+      status: string;
+      estimated_time: number;
+    }>(`/api/v1/commits/analyze?project_id=${projectId}`, body || {}),
+};
+
+/**
+ * 用户相关 API
+ */
+export const usersAPI = {
+  /**
+   * 获取用户列表
+   */
+  getUsers: (page = 1, per_page = 20) =>
+    api.get<{
+      items: Array<{
+        id: string;
+        email: string;
+        name: string;
+        role: 'admin' | 'editor' | 'viewer';
+        avatar_url?: string;
+        created_at: string;
+      }>;
+      total: number;
+      page: number;
+      per_page: number;
+      total_pages: number;
+    }>('/api/v1/users', { page, per_page }),
+
+  /**
+   * 更新用户信息
+   */
+  updateUser: (
+    id: string,
+    data: {
+      name?: string;
+      email?: string;
+      avatar_url?: string | null;
+      role?: 'admin' | 'editor' | 'viewer';
+    }
+  ) =>
+    api.put<{
+      user: {
+        id: string;
+        email: string;
+        name: string;
+        role: 'admin' | 'editor' | 'viewer';
+        avatar_url?: string;
+        created_at: string;
+        updated_at: string;
+      };
+    }>(`/api/v1/users/${id}`, data),
 };
 
 export { APIError };

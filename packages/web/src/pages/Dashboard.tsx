@@ -2,18 +2,29 @@
  * 仪表板页面
  */
 
+import { useQuery } from '@tanstack/react-query';
 import {
   FolderGit2,
   FileText,
   GitCommit,
   TrendingUp,
 } from 'lucide-react';
+import { statsAPI } from '../lib/api';
 
 /**
  * Dashboard 页面
  * 显示项目概览、最近活动、统计数据
  */
 function Dashboard() {
+  // 获取仪表板统计数据
+  const { data: statsData, isLoading } = useQuery({
+    queryKey: ['dashboardStats'],
+    queryFn: () => statsAPI.getDashboardStats(),
+  });
+
+  const stats = statsData?.stats;
+  const activities = statsData?.recent_activities || [];
+
   return (
     <div className="space-y-6">
       {/* 页面标题 */}
@@ -26,31 +37,35 @@ function Dashboard() {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="项目总数"
-          value="12"
-          change="+2"
+          value={isLoading ? '-' : String(stats?.projects.total || 0)}
+          change={`+${stats?.projects.this_week || 0}`}
           icon={FolderGit2}
           color="primary"
+          isLoading={isLoading}
         />
         <StatCard
           title="生成内容"
-          value="156"
-          change="+23"
+          value={isLoading ? '-' : String(stats?.contents.total || 0)}
+          change={`+${stats?.contents.this_week || 0}`}
           icon={FileText}
           color="success"
+          isLoading={isLoading}
         />
         <StatCard
           title="Commits 分析"
-          value="1,234"
-          change="+89"
+          value={isLoading ? '-' : String(stats?.commits.total || 0)}
+          change={`+${stats?.commits.this_week || 0}`}
           icon={GitCommit}
           color="warning"
+          isLoading={isLoading}
         />
         <StatCard
           title="SEO 评分均值"
-          value="85"
-          change="+5"
+          value={isLoading ? '-' : String(stats?.seo_score.average || 0)}
+          change={`+${stats?.seo_score.this_week_change || 0}`}
           icon={TrendingUp}
           color="primary"
+          isLoading={isLoading}
         />
       </div>
 
@@ -59,32 +74,34 @@ function Dashboard() {
         {/* 最近活动 */}
         <div className="card p-6">
           <h2 className="mb-4 text-lg font-semibold text-foreground">最近活动</h2>
-          <div className="space-y-4">
-            <ActivityItem
-              type="content"
-              title="生成了更新日志"
-              description="v1.2.0 更新日志"
-              time="2 小时前"
-            />
-            <ActivityItem
-              type="commit"
-              title="分析了新提交"
-              description="feat: 添加 AST 分析功能"
-              time="5 小时前"
-            />
-            <ActivityItem
-              type="project"
-              title="创建了新项目"
-              description="GitPulse Demo"
-              time="1 天前"
-            />
-            <ActivityItem
-              type="content"
-              title="发布了技术博客"
-              description="AST 分析技术详解"
-              time="2 天前"
-            />
-          </div>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <div className="mt-1.5 h-2 w-2 animate-pulse rounded-full bg-neutral-300"></div>
+                  <div className="flex-1 space-y-1">
+                    <div className="h-4 w-32 animate-pulse rounded bg-neutral-200"></div>
+                    <div className="h-3 w-48 animate-pulse rounded bg-neutral-100"></div>
+                  </div>
+                  <div className="h-3 w-16 animate-pulse rounded bg-neutral-100"></div>
+                </div>
+              ))}
+            </div>
+          ) : activities.length > 0 ? (
+            <div className="space-y-4">
+              {activities.map((activity, index) => (
+                <ActivityItem
+                  key={index}
+                  type={activity.type}
+                  title={activity.title}
+                  description={activity.description}
+                  time={activity.time}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-neutral-500">暂无活动记录</p>
+          )}
         </div>
 
         {/* 快捷操作 */}
@@ -127,12 +144,13 @@ interface StatCardProps {
   change: string;
   icon: React.ComponentType<{ className?: string }>;
   color: 'primary' | 'success' | 'warning' | 'error';
+  isLoading?: boolean;
 }
 
 /**
  * 统计卡片组件
  */
-function StatCard({ title, value, change, icon: Icon, color }: StatCardProps) {
+function StatCard({ title, value, change, icon: Icon, color, isLoading }: StatCardProps) {
   const colorClasses = {
     primary: 'bg-primary-50 text-primary',
     success: 'bg-success-50 text-success',
@@ -145,8 +163,12 @@ function StatCard({ title, value, change, icon: Icon, color }: StatCardProps) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-neutral-500">{title}</p>
-          <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
-          <p className="mt-1 text-xs text-success">{change} 本周</p>
+          <p className={`mt-1 text-2xl font-semibold text-foreground ${isLoading ? 'animate-pulse' : ''}`}>
+            {value}
+          </p>
+          {!isLoading && (
+            <p className="mt-1 text-xs text-success">{change} 本周</p>
+          )}
         </div>
         <div className={`rounded-lg p-3 ${colorClasses[color]}`}>
           <Icon className="h-6 w-6" />

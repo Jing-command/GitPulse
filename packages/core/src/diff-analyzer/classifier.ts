@@ -11,6 +11,56 @@ import type { CommitAnalysis, FileChange, ChangeSummary } from '../types';
  */
 export class ChangeClassifier {
   /**
+   * 分类 commit 变更
+   * 根据 commit 消息和文件变更生成分类摘要
+   * @param message commit 消息
+   * @param changes 文件变更列表
+   * @returns 变更摘要
+   */
+  classify(message: string, changes: FileChange[]): ChangeSummary {
+    const lowerMessage = message.toLowerCase();
+
+    // 确定变更类型
+    let type: ChangeSummary['type'] = 'chore';
+    if (lowerMessage.startsWith('feat') || lowerMessage.includes('add') || lowerMessage.includes('新增')) {
+      type = 'feature';
+    } else if (lowerMessage.startsWith('fix') || lowerMessage.includes('修复') || lowerMessage.includes('bug')) {
+      type = 'fix';
+    } else if (lowerMessage.startsWith('refactor') || lowerMessage.includes('重构')) {
+      type = 'refactor';
+    } else if (lowerMessage.startsWith('docs') || lowerMessage.includes('文档')) {
+      type = 'docs';
+    } else if (lowerMessage.startsWith('test') || lowerMessage.includes('测试')) {
+      type = 'test';
+    }
+
+    // 检查是否有破坏性变更
+    const breaking = lowerMessage.includes('breaking') || lowerMessage.includes('break') || lowerMessage.includes('!');
+
+    // 提取影响范围
+    const scope: string[] = [];
+    const scopeMatch = message.match(/\(([^)]+)\)/);
+    if (scopeMatch) {
+      scope.push(scopeMatch[1]);
+    }
+
+    // 提取描述
+    const description = message
+      .replace(/^(feat|fix|docs|style|refactor|test|chore)(\([^)]+\))?!?:\s*/, '')
+      .trim();
+
+    // 提取关键词
+    const keywords = this.extractKeywords(message);
+
+    return {
+      type,
+      breaking,
+      scope,
+      keywords,
+    };
+  }
+
+  /**
    * 分析 commit 的影响级别
    * @param analysis commit 分析结果
    * @returns 影响级别
@@ -86,6 +136,25 @@ export class ChangeClassifier {
     }
 
     return groups;
+  }
+
+  /**
+   * 提取关键词
+   * @param message commit 消息
+   * @returns 关键词列表
+   */
+  private extractKeywords(message: string): string[] {
+    const keywords: string[] = [];
+    const commonKeywords = ['fix', 'bug', 'feature', 'add', 'update', 'delete', 'refactor', 'test', 'docs'];
+
+    const lowerMessage = message.toLowerCase();
+    for (const keyword of commonKeywords) {
+      if (lowerMessage.includes(keyword)) {
+        keywords.push(keyword);
+      }
+    }
+
+    return keywords;
   }
 
   /**

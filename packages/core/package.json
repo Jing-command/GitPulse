@@ -34,6 +34,10 @@
     "./ai": {
       "import": "./dist/ai/index.js",
       "types": "./dist/ai/index.d.ts"
+    },
+    "./git-service": {
+      "import": "./dist/git-service.js",
+      "types": "./dist/git-service.d.ts"
     }
   },
   "scripts": {

@@ -3,16 +3,16 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, FileText, Clock, CheckCircle } from 'lucide-react';
-import { contentsAPI } from '@/lib/api';
+import { Plus, Search, Filter, FileText, Clock, CheckCircle, X, Loader2 } from 'lucide-react';
+import { contentsAPI, projectsAPI, commitsAPI } from '@/lib/api';
 
 interface Content {
   id: string;
   project_id: string;
   project_name: string;
-  type: 'changelog' | 'technical' | 'seo';
+  type: string;
   title: string;
-  status: 'draft' | 'pending' | 'approved' | 'published';
+  status: string;
   language: string;
   author_id: string;
   author_name: string;
@@ -24,6 +24,11 @@ interface Content {
  * Content 页面
  * 显示生成的内容列表、编辑、审核
  */
+interface Project {
+  id: string;
+  name: string;
+}
+
 function Content() {
   const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,9 +36,60 @@ function Content() {
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
 
+  // 生成内容模态框状态
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<string>('');
+  const [selectedType, setSelectedType] = useState<string>('changelog');
+  const [generating, setGenerating] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchContents();
   }, [filterType, filterStatus]);
+
+  // 获取项目列表（用于生成内容模态框）
+  const fetchProjects = async () => {
+    try {
+      const data = await projectsAPI.getProjects(1, 100);
+      setProjects(data.items);
+    } catch (err) {
+      console.error('获取项目列表失败', err);
+    }
+  };
+
+  // 打开生成内容模态框
+  const openGenerateModal = () => {
+    fetchProjects();
+    setSelectedProject('');
+    setSelectedType('changelog');
+    setModalError(null);
+    setIsModalOpen(true);
+  };
+
+  // 生成内容
+  const handleGenerate = async () => {
+    if (!selectedProject) {
+      setModalError('请选择项目');
+      return;
+    }
+
+    setGenerating(true);
+    setModalError(null);
+
+    try {
+      // 触发 commit 分析来生成内容
+      await commitsAPI.analyzeCommits(selectedProject, { incremental: true });
+
+      // 关闭模态框并刷新内容列表
+      setIsModalOpen(false);
+      fetchContents();
+    } catch (err) {
+      setModalError('生成内容失败，请稍后重试');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const fetchContents = async () => {
     try {
@@ -42,8 +98,8 @@ function Content() {
       if (filterType) params.type = filterType;
       if (filterStatus) params.status = filterStatus;
       
-      const response = await contentsAPI.getContents(params);
-      setContents(response.data.items);
+      const data = await contentsAPI.getContents(params);
+      setContents(data.items);
     } catch (err) {
       setError('获取内容列表失败');
     } finally {
@@ -75,7 +131,10 @@ function Content() {
           <h1 className="text-2xl font-semibold text-foreground">内容管理</h1>
           <p className="mt-1 text-sm text-neutral-500">管理生成的内容</p>
         </div>
-        <button className="btn bg-primary px-4 py-2 text-white hover:bg-primary-600">
+        <button
+          onClick={openGenerateModal}
+          className="btn bg-primary px-4 py-2 text-white hover:bg-primary-600"
+        >
           <Plus className="mr-2 h-4 w-4" />
           生成内容
         </button>
@@ -165,6 +224,91 @@ function Content() {
           </div>
         )}
       </div>
+
+      {/* 生成内容模态框 */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-foreground">生成内容</h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-lg p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600"
+                disabled={generating}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {modalError && (
+                <div className="rounded-lg bg-error-50 p-3 text-sm text-error">
+                  {modalError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-foreground">
+                  选择项目
+                </label>
+                <select
+                  value={selectedProject}
+                  onChange={(e) => setSelectedProject(e.target.value)}
+                  className="input mt-1 w-full"
+                  disabled={generating}
+                >
+                  <option value="">请选择一个项目</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground">
+                  内容类型
+                </label>
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value)}
+                  className="input mt-1 w-full"
+                  disabled={generating}
+                >
+                  <option value="changelog">更新日志</option>
+                  <option value="technical">技术博客</option>
+                  <option value="seo">SEO 文章</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-6">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="btn border border-border px-4 py-2 hover:bg-neutral-50"
+                disabled={generating}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={generating || !selectedProject}
+                className="btn bg-primary px-4 py-2 text-white hover:bg-primary-600 disabled:opacity-50"
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    生成中...
+                  </>
+                ) : (
+                  '开始生成'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -206,7 +350,7 @@ function ContentRow({ content }: { content: Content }) {
     published: CheckCircle,
   };
 
-  const StatusIcon = statusIcons[content.status];
+  const StatusIcon = statusIcons[content.status] || Clock;
 
   // 格式化时间
   const formatDate = (dateStr: string) => {

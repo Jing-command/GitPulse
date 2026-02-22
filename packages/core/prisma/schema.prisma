@@ -39,6 +39,8 @@ model projects {
   name        String
   description String?
   repo_url    String
+  status      String   @default("active") // active, inactive
+  avatar_index Int     @default(0) // SVG 头像索引 (0-29)
   config      Json?    // 项目配置 JSON
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -50,6 +52,7 @@ model projects {
   contexts    contexts[]
 
   @@index([repo_url])
+  @@index([status])
   @@map("projects")
 }
 
@@ -91,6 +94,7 @@ model commits {
   @@index([project_id])
   @@index([hash])
   @@index([timestamp])
+  @@index([project_id, timestamp])
   @@map("commits")
 }
 

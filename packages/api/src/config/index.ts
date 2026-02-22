@@ -43,7 +43,7 @@ function getEnvNumber(key: string, defaultValue: number): number {
 export const config: APIConfig = {
   port: getEnvNumber('PORT', 3001),
   nodeEnv: (getEnvString('NODE_ENV', 'development') as APIConfig['nodeEnv']),
-  corsOrigins: getEnvString('CORS_ORIGINS', 'http://localhost:3000').split(','),
+  corsOrigins: getEnvString('CORS_ORIGINS', 'http://localhost:3000,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3006,http://localhost:3007,http://localhost:3008').split(','),
   jwtSecret: getEnvString('JWT_SECRET', 'your-secret-key-change-in-production'),
   jwtExpiresIn: getEnvString('JWT_EXPIRES_IN', '2h'),
   databaseUrl: getEnvString('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/gitpulse?schema=public'),

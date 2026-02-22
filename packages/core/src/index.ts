@@ -21,5 +21,8 @@ export * from './seo';
 // AI 服务模块
 export * from './ai';
 
+// Git 服务模块
+export * from './git-service';
+
 // 类型定义
 export * from './types';
