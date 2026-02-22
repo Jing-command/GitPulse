@@ -1,345 +1,209 @@
-# GitPulse
+# 🚀 GitPulse
 
-<div align="center">
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-5.0-blue?style=flat-square&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/Node.js-20-green?style=flat-square&logo=node.js" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Prisma-5.0-2D3748?style=flat-square&logo=prisma" alt="Prisma" />
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker" alt="Docker" />
+</p>
 
-**技术内容全自动流水线**
-
-深度解析 Git 代码变更，自动生成更新日志、技术博客和文档
-
-[![npm version](https://img.shields.io/npm/v/gitpulse.svg)](https://www.npmjs.com/package/gitpulse)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue.svg)](https://www.typescriptlang.org/)
-
-[English](./README_EN.md) | 简体中文
-
-</div>
+<p align="center">
+  <b>技术内容全自动流水线</b> | 让每一次代码提交都变成高质量的技术文档
+</p>
 
 ---
 
-## ✨ 功能特性
+## ✨ 核心功能
 
-### 🔍 智能代码分析
+### 🔄 智能 Commit 分析
+- **多语言支持**: JavaScript/TypeScript、Python、Go、Rust 等主流语言
+- **AST 深度解析**: 不只是看 diff，而是理解代码语义变化
+- **智能分类**: 自动识别新功能、Bug 修复、性能优化、重构等类型
 
-- **Git Diff 解析** - 精准解析代码变更，支持多语言
-- **AST 分析** - 函数级变更检测，支持 JS/TS/Python
-- **变更分类** - 自动识别 feature/fix/refactor 等类型
-- **影响评估** - 自动计算 major/minor/patch 版本影响
+### 🤖 AI 内容生成
+- **更新日志**: 基于 Commit 自动生成版本发布说明
+- **技术博客**: 将代码变更转化为易懂的技术文章
+- **SEO 优化**: 自动生成关键词优化的内容，提升搜索引擎排名
 
-### 📝 多角色内容生成
+### 📝 内容管理
+- **可视化编辑器**: 支持 Markdown 和富文本编辑
+- **版本控制**: 内容版本历史追踪，随时回滚
+- **审批流程**: 团队协作审核，确保内容质量
 
-- **更新日志 (Changelog)** - 自动生成版本更新日志
-- **技术博客 (Technical Blog)** - 深度技术文章生成
-- **SEO 文章** - 搜索引擎优化文章生成
-- **多语言支持** - 支持中英文内容生成
-
-### 🤖 AI 驱动
-
-- **多服务商支持** - OpenAI、Anthropic、Ollama
-- **智能降级** - 主服务不可用时自动切换
-- **缓存机制** - 相同输入不重复调用 AI
-
-### 📚 文档同步
-
-- **VitePress 集成** - 自动同步到 VitePress 文档站点
-- **侧边栏管理** - 自动更新文档导航
-- **多格式输出** - 支持 Markdown、JSON 等格式
+### 🌐 多端发布
+- **GitHub Pages**: 一键部署静态站点
+- **VitePress**: 自动生成文档站点
+- **多平台适配**: 支持多种静态站点生成器
 
 ---
 
-## 📦 安装
+## 🎯 为什么选择 GitPulse?
 
-### NPM 全局安装
-
-```bash
-npm install -g gitpulse
-```
-
-### 使用 pnpm
-
-```bash
-pnpm add -g gitpulse
-```
-
-### 从源码构建
-
-```bash
-git clone https://github.com/your-org/gitpulse.git
-cd gitpulse
-pnpm install
-pnpm build
-```
+| 特性 | GitPulse | 传统方式 |
+|------|----------|----------|
+| 文档生成 | 🤖 AI 自动生成 | ✍️ 手动编写 |
+| 更新频率 | 🔄 每次提交自动更新 | ⏰ 依赖人工 |
+| 内容质量 | ✅ 结构化、标准化 | 📋 参差不齐 |
+| 团队协作 | 👥 内置审批流程 | 📧 邮件/文档来回 |
+| SEO 优化 | 🚀 自动生成关键词 | ❌ 常被忽略 |
 
 ---
 
 ## 🚀 快速开始
 
-### 1. 初始化项目
+### 环境要求
+- Node.js >= 20
+- pnpm >= 8
+- Docker & Docker Compose
+
+### 1. 克隆项目
 
 ```bash
-# 在项目根目录运行
-gitpulse init
+git clone https://github.com/Jing-command/GitPulse.git
+cd GitPulse
 ```
 
-这将创建一个 `.gitpulserc.yaml` 配置文件，引导您完成配置。
-
-### 2. 配置 AI 服务
-
-编辑 `.gitpulserc.yaml`，配置您的 AI 服务：
-
-```yaml
-ai:
-  provider: openai
-  model: gpt-4-turbo-preview
-  api_key: ${OPENAI_API_KEY}  # 从环境变量读取
-```
-
-### 3. 分析代码变更
+### 2. 安装依赖
 
 ```bash
-# 分析最近 10 个 commits
-gitpulse analyze --from HEAD~10 --to HEAD
-
-# 增量分析（仅分析未处理的 commits）
-gitpulse analyze --incremental
+pnpm install
 ```
 
-### 4. 生成内容
+### 3. 启动服务
 
 ```bash
-# 生成所有类型内容
-gitpulse generate --type all
+# 启动数据库（PostgreSQL + Redis）
+docker-compose -f docker/docker-compose.yml up -d
 
-# 仅生成更新日志
-gitpulse generate --type changelog --language zh
+# 启动后端 API
+pnpm --filter @gitpulse/api dev
+
+# 启动前端（新终端）
+pnpm --filter @gitpulse/web dev
 ```
 
-### 5. 同步到文档站点
+### 4. 访问应用
 
-```bash
-# 同步到 VitePress
-gitpulse sync
-```
-
-### 6. 一键运行完整流程
-
-```bash
-# 执行分析 -> 生成 -> 同步完整流程
-gitpulse run --from HEAD~5 --to HEAD
-```
+- 🌐 Web 界面: http://localhost:3000
+- 🔌 API 服务: http://localhost:3002
 
 ---
 
-## 📖 CLI 命令
-
-| 命令 | 描述 |
-|------|------|
-| `gitpulse init` | 初始化项目配置 |
-| `gitpulse analyze` | 分析 Git commits |
-| `gitpulse generate` | 生成内容 |
-| `gitpulse sync` | 同步到文档站点 |
-| `gitpulse run` | 一键运行完整流程 |
-| `gitpulse status` | 查看项目状态 |
-| `gitpulse config` | 管理配置项 |
-| `gitpulse server` | 启动 Web 服务 |
-
----
-
-## ⚙️ 配置说明
-
-### 完整配置示例
-
-```yaml
-# 项目信息
-project:
-  name: my-project
-  description: 我的项目描述
-
-# Git 配置
-git:
-  repo: .
-  branch: main
-  platforms:
-    - github
-
-# AI 配置
-ai:
-  provider: openai          # openai | anthropic | ollama
-  model: gpt-4-turbo-preview
-  api_key: ${OPENAI_API_KEY}
-
-# 内容配置
-content:
-  languages:
-    - zh
-    - en
-  changelog:
-    enabled: true
-    output: ./docs/changelog
-  technical:
-    enabled: true
-    output: ./docs/blog
-  seo:
-    enabled: true
-    keywords:
-      - 技术
-      - 开发
-  formats:
-    - markdown
-
-# 文档配置
-docs:
-  framework: vitepress
-  output: ./docs
-  sidebar: ./docs/.vitepress/sidebar.ts
-
-# 上下文感知
-context:
-  read_package: true
-  read_readme: true
-  analyze_structure: true
-
-# 审核流程
-review:
-  enabled: true
-  auto_publish: false
-
-# 预览配置
-preview:
-  enabled: true
-  port: 3000
-```
-
----
-
-## 🏗️ 项目结构
+## 📁 项目结构
 
 ```
 GitPulse/
-├── packages/
-│   ├── core/           # 核心引擎
-│   │   ├── diff-analyzer/    # Diff 分析
-│   │   ├── content-engine/   # 内容生成
-│   │   ├── context-reader/   # 上下文感知
-│   │   ├── doc-sync/         # 文档同步
-│   │   ├── seo/              # SEO 模块
-│   │   └── ai/               # AI 服务
-│   ├── cli/            # 命令行工具
-│   ├── web/            # Web 管理界面
-│   ├── api/            # REST API 服务
-│   └── github-action/  # GitHub Action
-├── docker/             # Docker 配置
-└── docs/               # 文档
+├── 📦 packages/
+│   ├── 🖥️ web/              # React + TypeScript 前端
+│   ├── ⚙️ api/              # Express + Prisma 后端 API
+│   ├── 🔧 core/             # 核心引擎（AI、解析、生成）
+│   ├── 🖥️ cli/              # 命令行工具
+│   └── 🔄 github-action/    # GitHub Actions 集成
+├── 🐳 docker/               # Docker 配置文件
+├── 🧪 tests/                # E2E 测试套件
+└── 📚 docs/                 # 项目文档
 ```
 
 ---
 
-## 🔧 开发指南
+## 🛠️ 技术栈
 
-### 环境要求
+### 前端
+- **React 18** + **TypeScript** - 现代化 UI 开发
+- **Vite** - 极速构建工具
+- **Tailwind CSS** - 原子化 CSS 框架
+- **Zustand** - 轻量级状态管理
 
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
-- PostgreSQL >= 15（可选，用于数据持久化）
+### 后端
+- **Express.js** - Web 框架
+- **Prisma** - 类型安全的数据库 ORM
+- **PostgreSQL** - 关系型数据库
+- **Redis** - 缓存与会话存储
 
-### 本地开发
+### AI & 解析
+- **OpenAI/Claude API** - 大语言模型集成
+- **Babel Parser** - JavaScript/TypeScript AST 解析
+- **Tree-sitter** - 多语言代码解析
+
+---
+
+## 🧪 测试
 
 ```bash
-# 安装依赖
-pnpm install
-
-# 启动 Web 开发服务
-pnpm --filter @gitpulse/web dev
-
-# 启动 API 服务
-pnpm --filter @gitpulse/api dev
-
-# 构建
-pnpm build
-
-# 运行测试
+# 运行所有测试
 pnpm test
 
-# 类型检查
-pnpm typecheck
-```
-
-### 数据库配置
-
-```bash
-# 复制环境配置
-cp packages/core/.env.example packages/core/.env
-
-# 运行数据库迁移
-pnpm --filter @gitpulse/core db:migrate
-
-# 生成 Prisma 客户端
-pnpm --filter @gitpulse/core db:generate
+# 运行 E2E 测试
+cd tests
+node run-all.js
 ```
 
 ---
 
-## 🐳 Docker 部署
+## 📸 界面预览
 
-```bash
-# 使用 Docker Compose 启动
-cd docker
-docker-compose up -d
-```
+### 仪表板
+<p align="center">
+  <img src="https://via.placeholder.com/800x400/3b82f6/ffffff?text=Dashboard+Preview" alt="Dashboard" />
+</p>
+
+### 项目管理
+<p align="center">
+  <img src="https://via.placeholder.com/800x400/10b981/ffffff?text=Projects+Preview" alt="Projects" />
+</p>
+
+### 内容编辑
+<p align="center">
+  <img src="https://via.placeholder.com/800x400/f59e0b/ffffff?text=Content+Editor" alt="Content Editor" />
+</p>
 
 ---
 
-## 📄 API 文档
+## 🗺️ 路线图
 
-API 服务提供 RESTful 接口，遵循腾讯 RESTful API 设计规范。
-
-### 基础 URL
-
-```
-http://localhost:3001/api/v1
-```
-
-### 主要接口
-
-| 方法 | 路径 | 描述 |
-|------|------|------|
-| GET | `/health` | 健康检查 |
-| POST | `/auth/login` | 用户登录 |
-| POST | `/auth/register` | 用户注册 |
-| GET | `/projects` | 项目列表 |
-| POST | `/projects` | 创建项目 |
-| GET | `/contents` | 内容列表 |
-| POST | `/contents` | 创建内容 |
-| GET | `/commits` | Commit 列表 |
-
-### 响应格式
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": { ... },
-  "request_id": "abc123",
-  "timestamp": "2024-01-01T00:00:00.000Z"
-}
-```
+- [x] 基础架构搭建
+- [x] Commit 解析引擎
+- [x] AI 内容生成
+- [x] Web 管理界面
+- [ ] GitHub Actions 集成
+- [ ] GitLab CI 支持
+- [ ] 更多 AI 提供商
+- [ ] 插件系统
+- [ ] 移动端 App
 
 ---
 
 ## 🤝 贡献指南
 
-欢迎贡献代码！请查看 [贡献指南](./CONTRIBUTING.md) 了解详情。
+我们欢迎所有形式的贡献！
+
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
 
 ---
 
-## 📜 许可证
+## 📄 许可证
 
-[MIT License](./LICENSE)
+本项目采用 [MIT](LICENSE) 许可证开源。
 
 ---
 
-## 🙏 致谢
+## 💬 联系我们
 
-- [OpenAI](https://openai.com/) - GPT 模型
-- [Anthropic](https://www.anthropic.com/) - Claude 模型
-- [VitePress](https://vitepress.dev/) - 文档框架
-- [Prisma](https://www.prisma.io/) - 数据库 ORM
+- 📧 Email: your.email@example.com
+- 💬 Issues: [GitHub Issues](https://github.com/Jing-command/GitPulse/issues)
+- 🌐 官网: https://gitpulse.dev (即将上线)
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/Jing-command">Jing-command</a>
+</p>
+
+<p align="center">
+  ⭐ Star 我们，让更多人发现 GitPulse！
+</p>
