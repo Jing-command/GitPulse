@@ -1,0 +1,5 @@
+# GitPulse Monorepo 工作空间配置
+# 定义包的位置，支持多包管理
+
+packages:
+  - "packages/*"

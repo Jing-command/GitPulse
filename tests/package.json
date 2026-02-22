@@ -1,0 +1,12 @@
+{
+  "name": "gitpulse-tests",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "GitPulse 浏览器自动化测试",
+  "scripts": {
+    "test": "node run-all.js"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}

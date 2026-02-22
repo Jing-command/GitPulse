@@ -1,0 +1,46 @@
+name: 'GitPulse Auto Documentation'
+description: '自动分析 Git 提交，生成更新日志、技术博客和文档'
+author: 'GitPulse'
+branding:
+  icon: 'file-text'
+  color: 'blue'
+
+inputs:
+  from:
+    description: '起始引用（分支、标签、commit）'
+    required: false
+    default: 'HEAD~10'
+  to:
+    description: '结束引用'
+    required: false
+    default: 'HEAD'
+  type:
+    description: '内容类型 (changelog|technical|seo|all)'
+    required: false
+    default: 'changelog'
+  language:
+    description: '目标语言'
+    required: false
+    default: 'zh'
+  output:
+    description: '输出目录'
+    required: false
+    default: './docs'
+  config:
+    description: '配置文件路径'
+    required: false
+    default: '.gitpulserc.yaml'
+  commit-message:
+    description: '提交消息'
+    required: false
+    default: 'docs: auto-generate documentation [skip ci]'
+
+outputs:
+  files-generated:
+    description: '生成的文件数量'
+  output-path:
+    description: '输出目录路径'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

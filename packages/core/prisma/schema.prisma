@@ -1,0 +1,178 @@
+// Prisma 数据库模型定义
+// 遵循腾讯代码规范，使用下划线命名
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model users {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  password      String?  // 可为空，支持 OAuth 登录
+  role          String   @default("viewer") // admin, editor, viewer
+  oauth_provider String? // OAuth 提供商：github, gitlab
+  oauth_id      String?  // OAuth 用户 ID
+  avatar_url    String?  // 头像 URL
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // 关联关系
+  projects      project_members[]
+  contents      contents[]
+  approvals     approvals[]
+
+  @@index([email])
+  @@index([oauth_provider, oauth_id])
+  @@map("users")
+}
+
+// 项目表
+model projects {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  repo_url    String
+  config      Json?    // 项目配置 JSON
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // 关联关系
+  members     project_members[]
+  commits     commits[]
+  contents    contents[]
+  contexts    contexts[]
+
+  @@index([repo_url])
+  @@map("projects")
+}
+
+// 项目成员关联表
+model project_members {
+  id         String   @id @default(cuid())
+  project_id String
+  user_id    String
+  role       String   @default("viewer") // admin, editor, viewer
+  created_at DateTime @default(now())
+
+  // 关联关系
+  project    projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user       users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, user_id])
+  @@index([project_id])
+  @@index([user_id])
+  @@map("project_members")
+}
+
+// Commit 分析表
+model commits {
+  id            String   @id @default(cuid())
+  project_id    String
+  hash          String   @unique
+  message       String
+  author        String
+  author_email  String
+  timestamp     DateTime
+  impact_level  String   // major, minor, patch
+  summary       Json     // 变更摘要 JSON
+  changes       Json?    // 文件变更 JSON 数组
+  created_at    DateTime @default(now())
+
+  // 关联关系
+  project       projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@index([project_id])
+  @@index([hash])
+  @@index([timestamp])
+  @@map("commits")
+}
+
+// 内容表
+model contents {
+  id           String   @id @default(cuid())
+  project_id   String
+  type         String   // changelog, technical, seo
+  title        String
+  content      String   @db.Text
+  formats      Json?    // 输出格式数组
+  metadata     Json?    // 元数据 JSON
+  language     String   @default("zh")
+  status       String   @default("draft") // draft, pending, approved, published
+  author_id    String
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+  published_at DateTime?
+
+  // 关联关系
+  project      projects         @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  author       users            @relation(fields: [author_id], references: [id])
+  versions     content_versions[] @relation("ContentVersions")
+  approvals    approvals[]
+
+  @@index([project_id])
+  @@index([type])
+  @@index([status])
+  @@index([author_id])
+  @@map("contents")
+}
+
+// 内容版本表
+model content_versions {
+  id          String   @id @default(cuid())
+  content_id  String
+  version     Int
+  content     String   @db.Text
+  change_log  String?  @db.Text
+  author_id   String
+  created_at  DateTime @default(now())
+
+  // 关联关系
+  contentItem contents @relation("ContentVersions", fields: [content_id], references: [id], onDelete: Cascade)
+
+  @@unique([content_id, version])
+  @@index([content_id])
+  @@map("content_versions")
+}
+
+// 审批记录表
+model approvals {
+  id          String   @id @default(cuid())
+  content_id  String
+  reviewer_id String
+  status      String   @default("pending") // pending, approved, rejected
+  comment     String?  @db.Text
+  created_at  DateTime @default(now())
+
+  // 关联关系
+  content     contents @relation(fields: [content_id], references: [id], onDelete: Cascade)
+  reviewer    users    @relation(fields: [reviewer_id], references: [id])
+
+  @@index([content_id])
+  @@index([reviewer_id])
+  @@index([status])
+  @@map("approvals")
+}
+
+// 项目上下文表
+model contexts {
+  id          String   @id @default(cuid())
+  project_id  String
+  type        String   // package, readme, structure, terminology
+  data        Json
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // 关联关系
+  project     projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, type])
+  @@index([project_id])
+  @@map("contexts")
+}

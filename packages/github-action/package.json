@@ -1,0 +1,35 @@
+{
+  "name": "@gitpulse/github-action",
+  "version": "1.0.0",
+  "description": "GitPulse GitHub Action - 自动生成文档",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.ts --license licenses.txt",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "gitpulse",
+    "github-action",
+    "documentation",
+    "changelog"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/exec": "^1.1.1",
+    "@actions/github": "^6.0.0",
+    "@gitpulse/core": "workspace:*",
+    "simple-git": "^3.22.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "@vercel/ncc": "^0.38.1",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.1"
+  }
+}

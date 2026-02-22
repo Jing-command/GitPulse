@@ -1,0 +1,88 @@
+{
+  "name": "@gitpulse/core",
+  "version": "1.0.0",
+  "description": "GitPulse 核心引擎 - Diff 分析、内容生成、文档同步",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./diff-analyzer": {
+      "import": "./dist/diff-analyzer/index.js",
+      "types": "./dist/diff-analyzer/index.d.ts"
+    },
+    "./content-engine": {
+      "import": "./dist/content-engine/index.js",
+      "types": "./dist/content-engine/index.d.ts"
+    },
+    "./context-reader": {
+      "import": "./dist/context-reader/index.js",
+      "types": "./dist/context-reader/index.d.ts"
+    },
+    "./doc-sync": {
+      "import": "./dist/doc-sync/index.js",
+      "types": "./dist/doc-sync/index.d.ts"
+    },
+    "./seo": {
+      "import": "./dist/seo/index.js",
+      "types": "./dist/seo/index.d.ts"
+    },
+    "./ai": {
+      "import": "./dist/ai/index.js",
+      "types": "./dist/ai/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rimraf dist",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio"
+  },
+  "keywords": [
+    "gitpulse",
+    "git",
+    "diff",
+    "changelog",
+    "documentation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.23.9",
+    "@babel/traverse": "^7.23.9",
+    "@babel/types": "^7.23.9",
+    "@prisma/client": "^5.8.1",
+    "simple-git": "^3.22.1",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5",
+    "@types/babel__traverse": "^7.28.0",
+    "@types/node": "^20.11.5",
+    "prisma": "^5.8.1",
+    "rimraf": "^5.0.5",
+    "tsup": "^8.0.1",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.1"
+  },
+  "peerDependencies": {
+    "@prisma/client": "^5.0.0"
+  },
+  "files": [
+    "dist",
+    "prisma"
+  ]
+}
