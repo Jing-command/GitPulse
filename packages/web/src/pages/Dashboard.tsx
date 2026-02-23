@@ -126,7 +126,7 @@ function Dashboard() {
 
   // 处理查看结果
   const handleViewResults = (projectId: string) => {
-    navigate(`/projects?project=${projectId}&tab=commits`);
+    navigate(`/projects?id=${projectId}`);
   };
 
   // 处理跳转到项目管理
