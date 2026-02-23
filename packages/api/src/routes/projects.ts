@@ -766,7 +766,7 @@ projectsRouter.get(
 /**
  * 同步项目 commits（从 GitHub 拉取最新）
  * POST /api/v1/projects/:id/sync
- * 需要 owner 或 admin 权限
+ * 项目成员均可同步（viewer 也可以拉取最新数据）
  */
 projectsRouter.post(
   '/:id/sync',
@@ -786,9 +786,9 @@ projectsRouter.post(
         return;
       }
 
-      // 检查权限（owner 或 admin）
-      const { hasPermission } = await checkProjectPermission(id, userId);
-      if (!hasPermission) {
+      // 检查是否是项目成员（所有成员都可以同步）
+      const isMember = await checkProjectMember(id, userId);
+      if (!isMember) {
         res.status(403).json({
           code: 403,
           message: 'Forbidden',

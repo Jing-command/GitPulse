@@ -334,15 +334,29 @@ function Projects() {
 
     setSyncing(true);
     try {
-      await projectsExtendedAPI.syncCommits(selectedProject.id);
-      // 等待1秒后刷新数据
-      setTimeout(async () => {
+      const result = await projectsExtendedAPI.syncCommits(selectedProject.id);
+      // 显示成功提示
+      alert(result.message || '同步任务已启动');
+
+      // 轮询等待同步完成（最多等待10秒）
+      let attempts = 0;
+      const maxAttempts = 10;
+      const pollInterval = setInterval(async () => {
+        attempts++;
         await loadProjectDetail(selectedProject);
         setLastSyncTime(new Date());
+
+        if (attempts >= maxAttempts) {
+          clearInterval(pollInterval);
+        }
       }, 1000);
     } catch (err) {
       console.error('同步失败:', err);
-      alert('同步任务启动失败');
+      if (err instanceof APIError) {
+        alert(`同步失败: ${err.userMessage}`);
+      } else {
+        alert('同步任务启动失败，请重试');
+      }
     } finally {
       setSyncing(false);
     }
