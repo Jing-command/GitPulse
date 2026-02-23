@@ -132,9 +132,73 @@ function SettingsNavItem({ title, icon, active, onClick }: SettingsNavItemProps)
 }
 
 /**
+ * AI 配置数据接口
+ */
+interface AIConfigData {
+  provider: string;
+  model: string;
+  apiKey: string;
+  baseUrl: string;
+  fallback: string;
+  temperature: number;
+}
+
+/**
+ * 从 localStorage 加载 AI 配置
+ */
+function loadAIConfig(): AIConfigData {
+  const saved = localStorage.getItem('gitpulse-ai-config');
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch {
+      // 解析失败时使用默认值
+    }
+  }
+  return {
+    provider: 'yunwu',
+    model: 'gemini-3-flash-preview',
+    apiKey: 'sk-uFeF7zgtzWOjv0qc26B2T9hjG5f3b9QqwQafLglsxiLI4kA2',
+    baseUrl: 'https://api.yunwu.ai/v1',
+    fallback: '',
+    temperature: 0.7,
+  };
+}
+
+/**
+ * 保存 AI 配置到 localStorage
+ */
+function saveAIConfig(config: AIConfigData) {
+  localStorage.setItem('gitpulse-ai-config', JSON.stringify(config));
+}
+
+/**
  * AI 配置组件
  */
 function AISettings() {
+  const [config, setConfig] = useState<AIConfigData>(loadAIConfig());
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const handleChange = (field: keyof AIConfigData, value: string | number) => {
+    setConfig(prev => ({ ...prev, [field]: value }));
+    setSaveSuccess(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // 模拟API调用延迟
+      await new Promise(resolve => setTimeout(resolve, 500));
+      saveAIConfig(config);
+      setSaveSuccess(true);
+      // 3秒后隐藏成功提示
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="card p-6">
       <h2 className="mb-6 text-lg font-semibold text-foreground">AI 配置</h2>
@@ -143,7 +207,11 @@ function AISettings() {
         {/* AI 服务商 */}
         <div>
           <label className="label mb-2 block">AI 服务商</label>
-          <select className="input w-full">
+          <select
+            className="input w-full"
+            value={config.provider}
+            onChange={e => handleChange('provider', e.target.value)}
+          >
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="ollama">Ollama (本地)</option>
@@ -155,7 +223,11 @@ function AISettings() {
         {/* 模型选择 */}
         <div>
           <label className="label mb-2 block">模型</label>
-          <select className="input w-full">
+          <select
+            className="input w-full"
+            value={config.model}
+            onChange={e => handleChange('model', e.target.value)}
+          >
             <option value="gpt-4-turbo-preview">GPT-4 Turbo</option>
             <option value="gpt-4">GPT-4</option>
             <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
@@ -179,7 +251,8 @@ function AISettings() {
             type="password"
             className="input w-full"
             placeholder="sk-..."
-            defaultValue="sk-uFeF7zgtzWOjv0qc26B2T9hjG5f3b9QqwQafLglsxiLI4kA2"
+            value={config.apiKey}
+            onChange={e => handleChange('apiKey', e.target.value)}
           />
           <p className="mt-1 text-xs text-neutral-500">API Key 已加密存储，仅显示部分内容</p>
         </div>
@@ -191,7 +264,8 @@ function AISettings() {
             type="url"
             className="input w-full"
             placeholder="https://api.yunwu.ai/v1"
-            defaultValue="https://api.yunwu.ai/v1"
+            value={config.baseUrl}
+            onChange={e => handleChange('baseUrl', e.target.value)}
           />
           <p className="mt-1 text-xs text-neutral-500">云雾中转站默认使用 https://api.yunwu.ai/v1</p>
         </div>
@@ -199,7 +273,11 @@ function AISettings() {
         {/* 降级配置 */}
         <div>
           <label className="label mb-2 block">降级服务商</label>
-          <select className="input w-full">
+          <select
+            className="input w-full"
+            value={config.fallback}
+            onChange={e => handleChange('fallback', e.target.value)}
+          >
             <option value="">不启用降级</option>
             <option value="anthropic">Anthropic</option>
             <option value="ollama">Ollama (本地)</option>
@@ -216,20 +294,32 @@ function AISettings() {
             min="0"
             max="1"
             step="0.1"
-            defaultValue="0.7"
+            value={config.temperature}
+            onChange={e => handleChange('temperature', parseFloat(e.target.value))}
             className="w-full"
           />
           <div className="flex justify-between text-xs text-neutral-500">
             <span>精确 (0)</span>
+            <span className="font-medium text-primary">{config.temperature}</span>
             <span>创意 (1)</span>
           </div>
         </div>
 
         {/* 保存按钮 */}
-        <div className="flex justify-end border-t border-border pt-6">
-          <button className="btn bg-primary px-6 py-2 text-white hover:bg-primary-600">
-            <Save className="mr-2 h-4 w-4" />
-            保存设置
+        <div className="flex items-center justify-end gap-4 border-t border-border pt-6">
+          {saveSuccess && (
+            <span className="flex items-center text-sm text-green-600">
+              <CheckCircle className="mr-1 h-4 w-4" />
+              保存成功
+            </span>
+          )}
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="btn bg-primary px-6 py-2 text-white hover:bg-primary-600 disabled:opacity-50"
+          >
+            <Save className={`mr-2 h-4 w-4 ${saving ? 'animate-spin' : ''}`} />
+            {saving ? '保存中...' : '保存设置'}
           </button>
         </div>
       </div>
