@@ -238,6 +238,22 @@ ANTHROPIC_API_KEY=        # For Anthropic/Claude integration
 JWT_SECRET=               # For API authentication
 ```
 
+### AI Analysis Configuration
+
+AI 分析支持两种配置方式（前端设置优先级高于环境变量）：
+
+**方式 1：前端设置（推荐）**
+- 在设置页面配置 AI 提供商、模型、API Key
+- 配置自动保存到 localStorage，分析时传递给后端
+
+**方式 2：环境变量**
+```bash
+AI_PROVIDER=yunwu                    # 提供商: openai, anthropic, yunwu
+AI_MODEL=gemini-3-flash-preview      # 模型名称
+AI_API_KEY=sk-xxx                    # API Key
+AI_BASE_URL=https://api.yunwu.ai/v1  # API 基础 URL
+```
+
 ## Code Style & Conventions
 
 ### ESLint Rules
@@ -288,6 +304,35 @@ node run-all.js    # Runs all *.spec.js files
 ```
 
 ## Gotchas & Common Issues
+
+### Fixed Port Configuration
+
+前端固定使用 3000 端口，后端固定使用 3001 端口。如果端口被占用：
+
+```bash
+# Windows - 查找并结束占用进程
+netstat -ano | findstr :3001
+taskkill /PID <PID> /F
+
+# 或终止所有 Node 进程
+Get-Process node | Stop-Process -Force
+```
+
+### AI Analysis Configuration
+
+AI 分析支持两种配置方式（前端设置优先级高于环境变量）：
+
+**方式 1：前端设置（推荐）**
+- 在设置页面配置 AI 提供商、模型、API Key
+- 配置自动保存到 localStorage，分析时传递给后端
+
+**方式 2：环境变量**
+```bash
+AI_PROVIDER=yunwu                    # 提供商: openai, anthropic, yunwu
+AI_MODEL=gemini-3-flash-preview      # 模型名称
+AI_API_KEY=sk-xxx                    # API Key
+AI_BASE_URL=https://api.yunwu.ai/v1  # API 基础 URL
+```
 
 ### Database Schema Changes
 
