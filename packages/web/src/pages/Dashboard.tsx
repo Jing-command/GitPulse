@@ -17,9 +17,12 @@ import { statsAPI } from '../lib/api';
  */
 function Dashboard() {
   // 获取仪表板统计数据
+  // staleTime: 0 确保每次进入页面都刷新数据
   const { data: statsData, isLoading } = useQuery({
     queryKey: ['dashboardStats'],
     queryFn: () => statsAPI.getDashboardStats(),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const stats = statsData?.stats;
