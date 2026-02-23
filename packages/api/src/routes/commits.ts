@@ -5,7 +5,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
-import { gitService, DiffParser, ChangeClassifier } from '@gitpulse/core';
+import { gitService, DiffParser, ChangeClassifier, AIAnalyzer } from '@gitpulse/core';
 import { authMiddleware } from '../middleware/auth.js';
 
 const prisma = new PrismaClient();
@@ -150,6 +150,7 @@ commitsRouter.post(
 
 /**
  * 分析 commits 并保存到数据库
+ * 集成 AI 智能分析，结合 commit message 和代码 diff 进行交叉验证
  */
 async function analyzeCommits(
   projectId: string,
@@ -186,6 +187,13 @@ async function analyzeCommits(
     const diffParser = new DiffParser();
     const classifier = new ChangeClassifier();
 
+    // 初始化 AI 分析器（如果配置了 AI）
+    const aiConfig = loadAIConfig();
+    const aiAnalyzer = aiConfig ? new AIAnalyzer(aiConfig) : null;
+    if (aiAnalyzer) {
+      console.log(`[GitPulse] AI 分析器已启用: ${aiConfig.provider}`);
+    }
+
     for (const commit of commits) {
       try {
         // 检查 commit 是否已存在
@@ -204,11 +212,51 @@ async function analyzeCommits(
         // 解析 diff
         const fileChanges = diffParser.parseDiff(diffOutput);
 
-        // 分类变更
-        const summary = classifier.classify(commit.message, fileChanges);
+        // 本地规则分析
+        const localSummary = classifier.classify(commit.message, fileChanges);
 
         // 确定影响级别
         const impactLevel = determineImpactLevel(commit.message, fileChanges);
+
+        // AI 智能分析（如果配置了 AI）
+        let aiSummary = null;
+        if (aiAnalyzer) {
+          try {
+            console.log(`[GitPulse] 正在使用 AI 分析 commit ${commit.hash.substring(0, 8)}...`);
+            const fileChangesSimple = fileChanges.map(f => ({
+              path: f.path,
+              type: f.type,
+            }));
+            aiSummary = await aiAnalyzer.analyze(commit.message, diffOutput, fileChangesSimple);
+            if (aiSummary) {
+              console.log(`[GitPulse] AI 分析完成: ${aiSummary.summary}`);
+            }
+          } catch (aiError) {
+            console.error(`[GitPulse] AI 分析失败，使用本地分析结果:`, aiError);
+          }
+        }
+
+        // 合并本地分析和 AI 分析结果
+        // 优先使用 AI 的语义分析，但保留本地分析的技术细节
+        const mergedSummary = {
+          // 本地分析结果
+          type: localSummary.type,
+          breaking: localSummary.breaking,
+          scope: localSummary.scope,
+          keywords: localSummary.keywords,
+          // AI 分析结果（如果有）
+          ...(aiSummary && {
+            semanticType: aiSummary.semanticType,
+            techDomain: aiSummary.techDomain,
+            codeQuality: aiSummary.codeQuality,
+            impactScope: aiSummary.impactScope,
+            aiSummary: aiSummary.summary,
+            aiDescription: aiSummary.description,
+            aiRisks: aiSummary.risks,
+            aiSuggestions: aiSummary.suggestions,
+            aiConfidence: aiSummary.confidence,
+          }),
+        };
 
         // 保存到数据库
         await prisma.commits.create({
@@ -219,7 +267,7 @@ async function analyzeCommits(
             author_email: commit.author_email,
             timestamp: new Date(commit.date),
             impact_level: impactLevel,
-            summary: summary as any,
+            summary: mergedSummary as any,
             project_id: projectId,
           },
         });
@@ -234,6 +282,28 @@ async function analyzeCommits(
   } catch (error) {
     console.error(`[GitPulse] 分析项目 ${projectId} 失败:`, error);
   }
+}
+
+/**
+ * 从环境变量加载 AI 配置
+ */
+function loadAIConfig() {
+  const provider = process.env.AI_PROVIDER || 'yunwu';
+  const apiKey = process.env.AI_API_KEY;
+  const baseUrl = process.env.AI_BASE_URL || 'https://api.yunwu.ai/v1';
+  const model = process.env.AI_MODEL || 'gemini-2.0-flash-exp';
+
+  if (!apiKey) {
+    console.log('[GitPulse] AI 未配置，使用本地规则分析');
+    return null;
+  }
+
+  return {
+    provider,
+    api_key: apiKey,
+    base_url: baseUrl,
+    model,
+  };
 }
 
 /**

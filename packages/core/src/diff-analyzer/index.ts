@@ -8,3 +8,5 @@ export { ChangeClassifier } from './classifier';
 export { ASTAnalyzer } from './ast-analyzer';
 export { JSTSParser } from './js-ts-parser';
 export { PythonParser } from './python-parser';
+export { AIAnalyzer, loadAIConfigFromStorage } from './ai-analyzer';
+export type { AIAnalysisResult } from './ai-analyzer';
