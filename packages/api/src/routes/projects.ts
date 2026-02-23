@@ -340,9 +340,12 @@ async function syncProjectCommits(projectId: string, repoUrl: string): Promise<v
     let savedCount = 0;
     for (const commit of commits) {
       try {
-        // 检查 commit 是否已存在
-        const existing = await prisma.commits.findUnique({
-          where: { hash: commit.hash },
+        // 检查 commit 是否已存在于当前项目（hash 按项目隔离）
+        const existing = await prisma.commits.findFirst({
+          where: {
+            hash: commit.hash,
+            project_id: projectId,
+          },
         });
 
         if (existing) {

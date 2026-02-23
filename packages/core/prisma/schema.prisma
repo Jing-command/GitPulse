@@ -78,7 +78,7 @@ model project_members {
 model commits {
   id            String   @id @default(cuid())
   project_id    String
-  hash          String   @unique
+  hash          String
   message       String
   author        String
   author_email  String
@@ -91,6 +91,8 @@ model commits {
   // 关联关系
   project       projects @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
+  // 同一个 commit hash 可以在不同项目中存在
+  @@unique([hash, project_id])
   @@index([project_id])
   @@index([hash])
   @@index([timestamp])
