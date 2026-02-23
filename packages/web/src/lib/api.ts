@@ -3,6 +3,8 @@
  * 封装 fetch 请求，统一处理认证和错误
  */
 
+import { useAuthStore } from '../stores/useAuthStore';
+
 // API 基础 URL - 后端服务地址
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3002';
 
@@ -50,6 +52,20 @@ function getToken(): string | null {
 }
 
 /**
+ * 处理 401 未授权错误
+ * 清除认证状态并重定向到登录页
+ */
+function handleUnauthorized(): void {
+  // 清除认证状态
+  useAuthStore.getState().logout();
+  // 重定向到登录页（保留当前路径以便登录后返回）
+  const currentPath = window.location.pathname;
+  if (currentPath !== '/login') {
+    window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+  }
+}
+
+/**
  * 通用请求方法
  */
 async function request<T>(
@@ -77,10 +93,21 @@ async function request<T>(
 
   try {
     const response = await fetch(url, config);
+
+    // 处理 401 未授权错误
+    if (response.status === 401) {
+      handleUnauthorized();
+      throw new APIError(401, 'Unauthorized', '登录已过期，请重新登录');
+    }
+
     const result: APIResponse<T> = await response.json();
 
-    // 检查业务错误
+    // 检查业务错误（包括后端返回的认证错误码）
     if (result.code !== 0) {
+      // 处理认证相关的业务错误码 (20001-20004)
+      if (result.code >= 20001 && result.code <= 20004) {
+        handleUnauthorized();
+      }
       throw new APIError(
         result.code,
         result.message,

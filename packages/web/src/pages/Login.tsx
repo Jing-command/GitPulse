@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Github, Gitlab, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '@/stores';
 import { authAPI, APIError } from '@/lib/api';
@@ -22,7 +22,11 @@ function isValidEmail(email: string): boolean {
  */
 function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const login = useAuthStore((state) => state.login);
+
+  // 获取 redirect 参数
+  const redirectPath = searchParams.get('redirect') || '/';
 
   // 表单状态
   const [email, setEmail] = useState('');
@@ -86,8 +90,8 @@ function Login() {
         result.token
       );
 
-      // 跳转到首页
-      navigate('/');
+      // 跳转到 redirect 指定的页面或首页
+      navigate(redirectPath);
     } catch (err) {
       // 处理错误
       if (err instanceof APIError) {
