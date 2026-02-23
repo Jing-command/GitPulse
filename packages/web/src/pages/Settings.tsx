@@ -160,6 +160,7 @@ function AISettings() {
             <option value="gpt-4">GPT-4</option>
             <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
             <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+            <option value="gemini-3-flash-preview">Gemini 3 Flash Preview</option>
             <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash</option>
             <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro</option>
             <option value="claude-3-opus-20240229">Claude 3 Opus</option>
