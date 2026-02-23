@@ -287,6 +287,33 @@ cd tests
 node run-all.js    # Runs all *.spec.js files
 ```
 
+## Gotchas & Common Issues
+
+### Database Schema Changes
+
+- `commits.hash` 已从全局唯一 (`@unique`) 改为组合唯一 (`@@unique([hash, project_id])`)
+  - 允许同一 commit hash 在不同项目中独立存在
+  - 查询时使用 `findFirst({ hash, project_id })` 而非 `findUnique({ hash })`
+
+### React Query Data Fetching
+
+Dashboard 和 Projects 页面使用 `staleTime: 0` 确保每次进入都刷新数据：
+
+```typescript
+const { data, isLoading } = useQuery({
+  queryKey: ['projects'],
+  queryFn: () => projectsAPI.getProjects(),
+  staleTime: 0,              // 禁用缓存，每次进入都获取
+  refetchOnWindowFocus: true, // 切回页面时自动刷新
+});
+```
+
+### API Permission Patterns
+
+- `checkProjectPermission()` - 检查 owner/admin 权限（用于修改操作）
+- `checkProjectMember()` - 检查成员权限（用于读取操作）
+- 同步 commits 允许所有成员（viewer 也可以触发）
+
 ## Important File Locations
 
 | File | Purpose |
