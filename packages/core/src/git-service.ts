@@ -113,9 +113,20 @@ export class GitService {
     // 检查是否已存在有效的 git 仓库
     try {
       await fs.access(join(localPath, '.git'));
-      // 目录已存在且是 git 仓库，执行 fetch 更新
+      // 目录已存在且是 git 仓库，执行 fetch 并更新到最新
       const git = simpleGit(localPath);
-      await git.fetch();
+      await git.fetch(['--all']);
+      // 重置到远程主分支的最新状态
+      try {
+        await git.reset(['--hard', 'origin/main']);
+      } catch {
+        // 如果 origin/main 不存在，尝试 origin/master
+        try {
+          await git.reset(['--hard', 'origin/master']);
+        } catch {
+          // 忽略错误，可能远程分支名不同
+        }
+      }
       return localPath;
     } catch {
       // 目录不存在或不是有效的 git 仓库，需要克隆
