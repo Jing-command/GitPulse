@@ -39,11 +39,12 @@ function getEnvNumber(key: string, defaultValue: number): number {
 
 /**
  * API 配置对象
+ * 固定端口：前端 3000，后端 3001
  */
 export const config: APIConfig = {
-  port: getEnvNumber('PORT', 3001),
+  port: 3001, // 固定使用 3001 端口
   nodeEnv: (getEnvString('NODE_ENV', 'development') as APIConfig['nodeEnv']),
-  corsOrigins: getEnvString('CORS_ORIGINS', 'http://localhost:3000,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://localhost:3005,http://localhost:3006,http://localhost:3007,http://localhost:3008').split(','),
+  corsOrigins: ['http://localhost:3000'], // 只允许前端 3000 端口
   jwtSecret: getEnvString('JWT_SECRET', 'your-secret-key-change-in-production'),
   jwtExpiresIn: getEnvString('JWT_EXPIRES_IN', '2h'),
   databaseUrl: getEnvString('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/gitpulse?schema=public'),

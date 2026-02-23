@@ -79,7 +79,7 @@ function Content() {
 
     try {
       // 触发 commit 分析来生成内容
-      await commitsAPI.analyzeCommits(selectedProject, { incremental: true });
+      await commitsAPI.analyzeCommits(selectedProject, { incremental: false });
 
       // 关闭模态框并刷新内容列表
       setIsModalOpen(false);

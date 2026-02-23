@@ -161,8 +161,18 @@ export class GitService {
   ): Promise<CommitInfo[]> {
     const git = simpleGit(repoPath);
 
+    // 如果指定了 from，先检查该 commit 是否存在
+    if (from) {
+      try {
+        await git.show([from, '--quiet']);
+      } catch {
+        console.log(`[GitPulse] Commit ${from} 不存在于当前仓库，回退到全量分析`);
+        from = undefined;
+      }
+    }
+
     // 构建日志范围
-    let range = '';
+    let range: string | undefined = undefined;
     if (from && to) {
       range = `${from}..${to}`;
     } else if (from) {
@@ -171,8 +181,7 @@ export class GitService {
       range = to;
     }
 
-    const log = await git.log({
-      from: range || undefined,
+    const logOptions: any = {
       format: {
         hash: '%H',
         message: '%s',
@@ -181,7 +190,20 @@ export class GitService {
         date: '%ai',
         body: '%b',
       },
-    });
+    };
+
+    // 如果指定了范围，使用 git.log([range]) 语法
+    let log;
+    if (range) {
+      log = await git.log([range]);
+      // 如果范围查询返回空，可能是 commit 不在当前分支历史中，回退到全量查询
+      if (log.total === 0) {
+        console.log(`[GitPulse] 范围查询 ${range} 返回空，回退到全量分析`);
+        log = await git.log(logOptions);
+      }
+    } else {
+      log = await git.log(logOptions);
+    }
 
     return log.all.map((commit: any) => ({
       hash: commit.hash,

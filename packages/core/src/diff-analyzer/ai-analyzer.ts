@@ -483,24 +483,47 @@ ${batch.diff}
       throw new Error(`不支持的 AI provider: ${provider}`);
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    // 带重试的 fetch 调用
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
 
-    if (!response.ok) {
-      throw new Error(`AI API error: ${response.status}`);
+        if (response.ok) {
+          const data = (await response.json()) as Record<string, unknown>;
+
+          if (provider === 'anthropic') {
+            const content = (data.content as Array<{ text?: string }>) || [];
+            return content[0]?.text || '';
+          }
+          const choices = (data.choices as Array<{ message?: { content?: string } }>) || [];
+          return choices[0]?.message?.content || '';
+        }
+
+        // 429 错误时等待后重试
+        if (response.status === 429) {
+          const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+          console.log(`[AIAnalyzer] 遇到 429 错误，等待 ${delay}ms 后重试 (${attempt + 1}/3)...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+
+        throw new Error(`AI API error: ${response.status}`);
+      } catch (error) {
+        lastError = error as Error;
+        if (attempt < 2) {
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`[AIAnalyzer] 请求失败，等待 ${delay}ms 后重试 (${attempt + 1}/3)...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
 
-    const data = (await response.json()) as Record<string, unknown>;
-
-    if (provider === 'anthropic') {
-      const content = (data.content as Array<{ text?: string }>) || [];
-      return content[0]?.text || '';
-    }
-    const choices = (data.choices as Array<{ message?: { content?: string } }>) || [];
-    return choices[0]?.message?.content || '';
+    throw lastError || new Error('AI API 调用失败');
   }
 
   /**

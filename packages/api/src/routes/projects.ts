@@ -750,6 +750,7 @@ projectsRouter.get(
             author: commit.author,
             author_email: commit.author_email,
             date: commit.timestamp.toISOString(),
+            summary: commit.summary,
           })),
           total,
           page,

@@ -437,6 +437,7 @@ export const projectsExtendedAPI = {
         author: string;
         author_email: string;
         date: string;
+        summary?: unknown;
       }>;
       total: number;
       page: number;
@@ -519,6 +520,7 @@ export const commitsAPI = {
 
   /**
    * 触发 commit 分析
+   * 自动从 localStorage 读取 AI 配置（如果调用者没有提供）
    */
   analyzeCommits: (
     projectId: string,
@@ -526,13 +528,56 @@ export const commitsAPI = {
       from?: string;
       to?: string;
       incremental?: boolean;
+      aiConfig?: {
+        provider: string;
+        model: string;
+        apiKey: string;
+        baseUrl: string;
+      };
     }
-  ) =>
-    api.post<{
+  ) => {
+    // 如果调用者没有提供 aiConfig，尝试从 localStorage 读取
+    let aiConfig = body?.aiConfig;
+    if (!aiConfig) {
+      const savedConfig = localStorage.getItem('gitpulse-ai-config');
+      if (savedConfig) {
+        try {
+          const parsed = JSON.parse(savedConfig);
+          aiConfig = {
+            provider: parsed.provider || 'yunwu',
+            model: parsed.model || 'gemini-2.0-flash-exp',
+            apiKey: parsed.apiKey,
+            baseUrl: parsed.baseUrl || 'https://api.yunwu.ai/v1',
+          };
+        } catch {
+          console.error('[GitPulse] 解析 AI 配置失败');
+        }
+      }
+    }
+
+    const requestBody = {
+      ...body,
+      ...(aiConfig && { aiConfig }),
+    };
+
+    return api.post<{
       task_id: string;
       status: string;
       estimated_time: number;
-    }>(`/api/v1/commits/analyze?project_id=${projectId}`, body || {}),
+    }>(`/api/v1/commits/analyze?project_id=${projectId}`, requestBody);
+  },
+
+  /**
+   * 获取 AI 配置状态
+   */
+  getAIConfigStatus: () =>
+    api.get<{
+      ai_enabled: boolean;
+      provider: string;
+      model: string;
+      base_url: string;
+      api_key_configured: boolean;
+    }>('/api/v1/commits/config/status'),
 };
 
 /**
