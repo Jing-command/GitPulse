@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Search,
@@ -55,10 +56,23 @@ interface Branch {
 function Projects() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // 使用 useQuery 获取项目列表，staleTime: 0 确保每次进入页面都刷新
+  const {
+    data: projectsData,
+    isLoading: loading,
+    error: queryError,
+    refetch: refetchProjects,
+  } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => projectsAPI.getProjects(),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+  });
+
+  const projects = projectsData?.items || [];
+  const error = queryError ? '获取项目列表失败' : null;
 
   // 模态框状态
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -97,10 +111,6 @@ function Projects() {
   // 同步状态
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-
-  useEffect(() => {
-    fetchProjects();
-  }, []);
 
   // 当 URL 参数中有项目ID时，自动加载项目详情
   useEffect(() => {
@@ -166,23 +176,6 @@ function Projects() {
     }
   };
 
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      const data = await projectsAPI.getProjects();
-      setProjects(data.items);
-      setError(null);
-    } catch (err) {
-      if (err instanceof APIError && err.code === 401) {
-        navigate('/login');
-        return;
-      }
-      setError('获取项目列表失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -207,7 +200,8 @@ function Projects() {
 
       setIsModalOpen(false);
       setFormData({ name: '', description: '', repo_url: '' });
-      await fetchProjects();
+      // 刷新项目列表
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
     } catch (err) {
       setFormError('创建项目失败，请重试');
     } finally {
@@ -241,7 +235,8 @@ function Projects() {
     setDeleting(projectToDelete.id);
     try {
       await projectsAPI.deleteProject(projectToDelete.id);
-      await fetchProjects();
+      // 刷新项目列表
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
       setDeleteConfirmOpen(false);
       setProjectToDelete(null);
     } catch (err) {
@@ -390,7 +385,7 @@ function Projects() {
         <div className="text-center">
           <div className="text-error">{error}</div>
           <button
-            onClick={fetchProjects}
+            onClick={() => refetchProjects()}
             className="mt-4 rounded-lg bg-primary px-4 py-2 text-white hover:bg-primary-600"
           >
             重试
