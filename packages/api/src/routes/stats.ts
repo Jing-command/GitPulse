@@ -16,11 +16,41 @@ statsRouter.use(authMiddleware);
 /**
  * 获取仪表板统计数据
  * GET /api/v1/stats/dashboard
+ * 只统计当前用户有权限的项目数据
  */
 statsRouter.get(
   '/dashboard',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 构建用户有权限的项目查询条件
+      const userProjectsWhere = {
+        members: {
+          some: {
+            user_id: userId,
+          },
+        },
+      };
+
+      // 获取用户有权限的项目 ID 列表
+      const userProjects = await prisma.projects.findMany({
+        where: userProjectsWhere,
+        select: { id: true },
+      });
+      const userProjectIds = userProjects.map((p) => p.id);
+
       // 并行获取各项统计数据
       const [
         projectsCount,
@@ -32,30 +62,41 @@ statsRouter.get(
         commitsThisWeek,
       ] = await Promise.all([
         // 项目总数
-        prisma.projects.count(),
-        // 内容总数
-        prisma.contents.count(),
-        // Commit 总数
-        prisma.commits.count(),
+        prisma.projects.count({ where: userProjectsWhere }),
+        // 内容总数（只统计用户项目的）
+        prisma.contents.count({
+          where: {
+            project_id: { in: userProjectIds },
+          },
+        }),
+        // Commit 总数（只统计用户项目的）
+        prisma.commits.count({
+          where: {
+            project_id: { in: userProjectIds },
+          },
+        }),
         // 本周新增项目
         prisma.projects.count({
           where: {
+            ...userProjectsWhere,
             created_at: {
               gte: getWeekStart(),
             },
           },
         }),
-        // 本周新增内容
+        // 本周新增内容（只统计用户项目的）
         prisma.contents.count({
           where: {
+            project_id: { in: userProjectIds },
             created_at: {
               gte: getWeekStart(),
             },
           },
         }),
-        // 本周新增 commits
+        // 本周新增 commits（只统计用户项目的）
         prisma.commits.count({
           where: {
+            project_id: { in: userProjectIds },
             timestamp: {
               gte: getWeekStart(),
             },
@@ -63,9 +104,10 @@ statsRouter.get(
         }),
       ]);
 
-      // 计算平均 SEO 评分（如果 metadata 中有 score 字段）
+      // 计算平均 SEO 评分（只统计用户项目的）
       const seoContents = await prisma.contents.findMany({
         where: {
+          project_id: { in: userProjectIds },
           type: 'seo',
           metadata: {
             path: ['score'],
@@ -119,8 +161,8 @@ statsRouter.get(
         }
       }
 
-      // 获取最近活动
-      const recentActivities = await getRecentActivities();
+      // 获取最近活动（只统计用户项目的）
+      const recentActivities = await getRecentActivities(userProjectIds);
 
       res.json({
         code: 0,
@@ -169,10 +211,19 @@ function getWeekStart(): Date {
 
 /**
  * 获取最近活动
+ * 只返回指定项目 ID 列表中的活动
  */
-async function getRecentActivities() {
+async function getRecentActivities(projectIds: string[]) {
+  // 如果没有项目，返回空数组
+  if (projectIds.length === 0) {
+    return [];
+  }
+
   // 获取最近的内容生成活动
   const recentContents = await prisma.contents.findMany({
+    where: {
+      project_id: { in: projectIds },
+    },
     take: 5,
     orderBy: { created_at: 'desc' },
     include: {
@@ -184,6 +235,9 @@ async function getRecentActivities() {
 
   // 获取最近的 commits
   const recentCommits = await prisma.commits.findMany({
+    where: {
+      project_id: { in: projectIds },
+    },
     take: 5,
     orderBy: { timestamp: 'desc' },
     include: {
@@ -195,6 +249,9 @@ async function getRecentActivities() {
 
   // 获取最近的项目
   const recentProjects = await prisma.projects.findMany({
+    where: {
+      id: { in: projectIds },
+    },
     take: 5,
     orderBy: { created_at: 'desc' },
   });

@@ -41,6 +41,7 @@ const paginationSchema = z.object({
 /**
  * 获取项目列表
  * GET /api/v1/projects
+ * 只返回当前用户有权限的项目
  */
 projectsRouter.get(
   '/',
@@ -49,8 +50,29 @@ projectsRouter.get(
       const { page, per_page } = paginationSchema.parse(req.query);
       const skip = (page - 1) * per_page;
 
+      // 获取当前用户ID
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 查询当前用户有权限的项目（通过 project_members 关联表）
       const [projects, total] = await Promise.all([
         prisma.projects.findMany({
+          where: {
+            members: {
+              some: {
+                user_id: userId,
+              },
+            },
+          },
           skip,
           take: per_page,
           orderBy: { updated_at: 'desc' },
@@ -63,7 +85,15 @@ projectsRouter.get(
             },
           },
         }),
-        prisma.projects.count(),
+        prisma.projects.count({
+          where: {
+            members: {
+              some: {
+                user_id: userId,
+              },
+            },
+          },
+        }),
       ]);
 
       const total_pages = Math.ceil(total / per_page);
@@ -102,16 +132,36 @@ projectsRouter.get(
 /**
  * 获取项目详情
  * GET /api/v1/projects/:id
+ * 只返回当前用户有权限的项目
  */
 projectsRouter.get(
   '/:id',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
       const [project, commitsCount, contentsCount] = await Promise.all([
         prisma.projects.findUnique({
-          where: { id },
+          where: {
+            id,
+            members: {
+              some: {
+                user_id: userId,
+              },
+            },
+          },
           include: {
             members: {
               include: {
@@ -128,7 +178,7 @@ projectsRouter.get(
         res.status(404).json({
           code: 404,
           message: 'Project not found',
-          user_message: '项目不存在',
+          user_message: '项目不存在或无权限访问',
           request_id: Math.random().toString(36).substring(7),
           timestamp: new Date().toISOString(),
         });
@@ -325,14 +375,65 @@ async function syncProjectCommits(projectId: string, repoUrl: string): Promise<v
 }
 
 /**
+ * 检查用户是否有项目管理权限（owner 或 admin）
+ */
+async function checkProjectPermission(
+  projectId: string,
+  userId: string
+): Promise<{ hasPermission: boolean; role: string | null }> {
+  const member = await prisma.project_members.findUnique({
+    where: {
+      project_id_user_id: {
+        project_id: projectId,
+        user_id: userId,
+      },
+    },
+  });
+
+  if (!member) {
+    return { hasPermission: false, role: null };
+  }
+
+  const canManage = member.role === 'owner' || member.role === 'admin';
+  return { hasPermission: canManage, role: member.role };
+}
+
+/**
  * 更新项目
  * POST /api/v1/projects/:id
+ * 只有 owner 或 admin 可以更新
  */
 projectsRouter.post(
   '/:id',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 检查权限
+      const { hasPermission } = await checkProjectPermission(id, userId);
+      if (!hasPermission) {
+        res.status(403).json({
+          code: 403,
+          message: 'Forbidden',
+          user_message: '您没有权限更新此项目',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       const data = updateProjectSchema.parse(req.body);
 
       const project = await prisma.projects.update({
@@ -368,14 +469,59 @@ projectsRouter.post(
 );
 
 /**
+ * 检查用户是否是项目 owner
+ */
+async function checkProjectOwner(
+  projectId: string,
+  userId: string
+): Promise<boolean> {
+  const member = await prisma.project_members.findUnique({
+    where: {
+      project_id_user_id: {
+        project_id: projectId,
+        user_id: userId,
+      },
+    },
+  });
+
+  return member?.role === 'owner';
+}
+
+/**
  * 删除项目
  * DELETE /api/v1/projects/:id
+ * 只有 owner 可以删除
  */
 projectsRouter.delete(
   '/:id',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 检查是否是 owner
+      const isOwner = await checkProjectOwner(id, userId);
+      if (!isOwner) {
+        res.status(403).json({
+          code: 403,
+          message: 'Forbidden',
+          user_message: '只有项目所有者可以删除项目',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
       await prisma.projects.delete({
         where: { id },
@@ -395,14 +541,59 @@ projectsRouter.delete(
 );
 
 /**
+ * 检查用户是否是项目成员
+ */
+async function checkProjectMember(
+  projectId: string,
+  userId: string
+): Promise<boolean> {
+  const member = await prisma.project_members.findUnique({
+    where: {
+      project_id_user_id: {
+        project_id: projectId,
+        user_id: userId,
+      },
+    },
+  });
+
+  return !!member;
+}
+
+/**
  * 获取项目分支列表
  * GET /api/v1/projects/:id/branches
+ * 只返回当前用户有权限的项目
  */
 projectsRouter.get(
   '/:id/branches',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 检查是否是项目成员
+      const isMember = await checkProjectMember(id, userId);
+      if (!isMember) {
+        res.status(403).json({
+          code: 403,
+          message: 'Forbidden',
+          user_message: '您没有权限访问此项目',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
       const project = await prisma.projects.findUnique({
         where: { id },
@@ -465,12 +656,39 @@ const commitsQuerySchema = z.object({
 /**
  * 获取项目提交历史（优先从数据库缓存获取）
  * GET /api/v1/projects/:id/git-commits
+ * 只返回当前用户有权限的项目
  */
 projectsRouter.get(
   '/:id/git-commits',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 检查是否是项目成员
+      const isMember = await checkProjectMember(id, userId);
+      if (!isMember) {
+        res.status(403).json({
+          code: 403,
+          message: 'Forbidden',
+          user_message: '您没有权限访问此项目',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       const { page, per_page } = commitsQuerySchema.parse(req.query);
 
       const project = await prisma.projects.findUnique({
@@ -548,12 +766,38 @@ projectsRouter.get(
 /**
  * 同步项目 commits（从 GitHub 拉取最新）
  * POST /api/v1/projects/:id/sync
+ * 需要 owner 或 admin 权限
  */
 projectsRouter.post(
   '/:id/sync',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        res.status(401).json({
+          code: 401,
+          message: 'Unauthorized',
+          user_message: '请先登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
+      // 检查权限（owner 或 admin）
+      const { hasPermission } = await checkProjectPermission(id, userId);
+      if (!hasPermission) {
+        res.status(403).json({
+          code: 403,
+          message: 'Forbidden',
+          user_message: '您没有权限同步此项目',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
       const project = await prisma.projects.findUnique({
         where: { id },
