@@ -339,7 +339,7 @@ export interface ApprovalRecord {
  */
 export interface AIConfig {
   /** 服务商 */
-  provider: 'openai' | 'anthropic' | 'ollama';
+  provider: 'openai' | 'anthropic' | 'ollama' | 'yunwu';
   /** 模型名称 */
   model: string;
   /** API 密钥 */

@@ -7,6 +7,7 @@ import type { AIConfig } from '../types';
 import { OpenAIProvider } from './providers/openai';
 import { AnthropicProvider } from './providers/anthropic';
 import { OllamaProvider } from './providers/ollama';
+import { YunwuProvider } from './providers/yunwu';
 
 /**
  * AI 提供者接口
@@ -61,6 +62,8 @@ export class AIService {
         return new AnthropicProvider(config);
       case 'ollama':
         return new OllamaProvider(config);
+      case 'yunwu':
+        return new YunwuProvider(config);
       default:
         console.warn(`Unknown AI provider: ${config.provider}`);
         return null;

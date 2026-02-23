@@ -147,6 +147,7 @@ function AISettings() {
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="ollama">Ollama (本地)</option>
+            <option value="yunwu">云雾中转站</option>
           </select>
           <p className="mt-1 text-xs text-neutral-500">选择用于生成内容的 AI 服务商</p>
         </div>
@@ -158,7 +159,16 @@ function AISettings() {
             <option value="gpt-4-turbo-preview">GPT-4 Turbo</option>
             <option value="gpt-4">GPT-4</option>
             <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+            <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash</option>
+            <option value="gemini-1.5-pro-latest">Gemini 1.5 Pro</option>
+            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+            <option value="deepseek-chat">DeepSeek Chat</option>
           </select>
+          <p className="mt-1 text-xs text-neutral-500">
+            云雾中转站支持多种模型，包括 Gemini、Claude、GPT 等
+          </p>
         </div>
 
         {/* API Key */}
@@ -168,9 +178,21 @@ function AISettings() {
             type="password"
             className="input w-full"
             placeholder="sk-..."
-            defaultValue="sk-••••••••••••••••"
+            defaultValue="sk-uFeF7zgtzWOjv0qc26B2T9hjG5f3b9QqwQafLglsxiLI4kA2"
           />
           <p className="mt-1 text-xs text-neutral-500">API Key 已加密存储，仅显示部分内容</p>
+        </div>
+
+        {/* API 基础 URL */}
+        <div>
+          <label className="label mb-2 block">API 基础 URL</label>
+          <input
+            type="url"
+            className="input w-full"
+            placeholder="https://api.yunwu.ai/v1"
+            defaultValue="https://api.yunwu.ai/v1"
+          />
+          <p className="mt-1 text-xs text-neutral-500">云雾中转站默认使用 https://api.yunwu.ai/v1</p>
         </div>
 
         {/* 降级配置 */}
@@ -180,6 +202,7 @@ function AISettings() {
             <option value="">不启用降级</option>
             <option value="anthropic">Anthropic</option>
             <option value="ollama">Ollama (本地)</option>
+            <option value="yunwu">云雾中转站</option>
           </select>
           <p className="mt-1 text-xs text-neutral-500">当主服务商不可用时，自动切换到降级服务商</p>
         </div>

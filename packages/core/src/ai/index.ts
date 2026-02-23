@@ -7,3 +7,4 @@ export { AIService } from './service';
 export { OpenAIProvider } from './providers/openai';
 export { AnthropicProvider } from './providers/anthropic';
 export { OllamaProvider } from './providers/ollama';
+export { YunwuProvider } from './providers/yunwu';
