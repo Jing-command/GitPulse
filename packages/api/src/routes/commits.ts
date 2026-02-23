@@ -255,6 +255,7 @@ async function analyzeCommits(
             aiRisks: aiSummary.risks,
             aiSuggestions: aiSummary.suggestions,
             aiConfidence: aiSummary.confidence,
+            batchInfo: aiSummary.batchInfo,
           }),
         };
 
