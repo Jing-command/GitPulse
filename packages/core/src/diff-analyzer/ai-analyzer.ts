@@ -375,7 +375,10 @@ ${batch.diff}
     const allRisks = [...overview.risks];
     for (const batch of batchResults) {
       for (const risk of batch.risks) {
-        if (!allRisks.some(r => r.includes(risk.substring(0, 20)))) {
+        // 防御性检查：确保 risk 是字符串
+        if (typeof risk !== 'string') continue;
+        const riskPrefix = risk.substring(0, 20);
+        if (!allRisks.some(r => r.includes(riskPrefix))) {
           allRisks.push(risk);
         }
       }
@@ -385,7 +388,10 @@ ${batch.diff}
     const allSuggestions = [...overview.suggestions];
     for (const batch of batchResults) {
       for (const suggestion of batch.suggestions) {
-        if (!allSuggestions.some(s => s.includes(suggestion.substring(0, 20)))) {
+        // 防御性检查：确保 suggestion 是字符串
+        if (typeof suggestion !== 'string') continue;
+        const suggestionPrefix = suggestion.substring(0, 20);
+        if (!allSuggestions.some(s => s.includes(suggestionPrefix))) {
           allSuggestions.push(suggestion);
         }
       }
@@ -527,6 +533,34 @@ ${batch.diff}
   }
 
   /**
+   * 规范化字符串数组 - 确保数组中的每个元素都是字符串
+   */
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .map(item => {
+        if (typeof item === 'string') {
+          return item;
+        }
+        if (item === null || item === undefined) {
+          return '';
+        }
+        // 将对象转换为 JSON 字符串
+        if (typeof item === 'object') {
+          try {
+            return JSON.stringify(item);
+          } catch {
+            return String(item);
+          }
+        }
+        return String(item);
+      })
+      .filter(item => item.length > 0);
+  }
+
+  /**
    * 解析 AI 响应
    */
   private parseResponse(response: string): AIAnalysisResult {
@@ -556,8 +590,8 @@ ${batch.diff}
       },
       summary: parsed.summary || '代码变更',
       description: parsed.description || '',
-      risks: parsed.risks || [],
-      suggestions: parsed.suggestions || [],
+      risks: this.normalizeStringArray(parsed.risks),
+      suggestions: this.normalizeStringArray(parsed.suggestions),
       confidence: parsed.confidence ?? 0.5,
     };
   }

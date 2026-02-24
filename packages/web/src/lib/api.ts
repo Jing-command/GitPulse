@@ -569,15 +569,37 @@ export const commitsAPI = {
 
   /**
    * 获取 AI 配置状态
+   * 自动从 localStorage 读取配置并传递给后端，确保后端正确识别前端配置
    */
-  getAIConfigStatus: () =>
-    api.get<{
+  getAIConfigStatus: () => {
+    // 从 localStorage 读取配置
+    let queryParams = '';
+    try {
+      const savedConfig = localStorage.getItem('gitpulse-ai-config');
+      if (savedConfig) {
+        const parsed = JSON.parse(savedConfig);
+        if (parsed.apiKey) {
+          const params = new URLSearchParams();
+          params.append('provider', parsed.provider || 'yunwu');
+          params.append('model', parsed.model || 'gemini-2.0-flash-exp');
+          params.append('apiKey', parsed.apiKey);
+          params.append('baseUrl', parsed.baseUrl || 'https://api.yunwu.ai/v1');
+          queryParams = `?${params.toString()}`;
+        }
+      }
+    } catch {
+      console.error('[GitPulse] 解析 AI 配置失败');
+    }
+
+    return api.get<{
       ai_enabled: boolean;
       provider: string;
       model: string;
       base_url: string;
       api_key_configured: boolean;
-    }>('/api/v1/commits/config/status'),
+      source: 'user' | 'server' | 'none';
+    }>(`/api/v1/commits/config/status${queryParams}`);
+  },
 };
 
 /**
@@ -626,6 +648,74 @@ export const usersAPI = {
         updated_at: string;
       };
     }>(`/api/v1/users/${id}`, data),
+};
+
+/**
+ * 日志相关 API
+ */
+export const logsAPI = {
+  /**
+   * 获取日志列表
+   */
+  getLogs: (params?: {
+    level?: 'debug' | 'info' | 'warn' | 'error';
+    module?: string;
+    startTime?: string;
+    endTime?: string;
+    limit?: number;
+    offset?: number;
+  }) =>
+    api.get<{
+      logs: Array<{
+        id: string;
+        timestamp: string;
+        level: 'debug' | 'info' | 'warn' | 'error';
+        module: string;
+        message: string;
+        metadata?: Record<string, unknown>;
+      }>;
+      total: number;
+      pagination: {
+        limit: number;
+        offset: number;
+        hasMore: boolean;
+      };
+    }>('/api/v1/logs', params),
+
+  /**
+   * 获取最近日志
+   */
+  getRecentLogs: (limit?: number) =>
+    api.get<{
+      logs: Array<{
+        id: string;
+        timestamp: string;
+        level: 'debug' | 'info' | 'warn' | 'error';
+        module: string;
+        message: string;
+        metadata?: Record<string, unknown>;
+      }>;
+    }>('/api/v1/logs/recent', { limit }),
+
+  /**
+   * 获取日志统计
+   */
+  getLogStats: () =>
+    api.get<{
+      total: number;
+      byLevel: {
+        debug: number;
+        info: number;
+        warn: number;
+        error: number;
+      };
+    }>('/api/v1/logs/stats'),
+
+  /**
+   * 清空日志
+   */
+  clearLogs: () =>
+    api.post<null>('/api/v1/logs/clear'),
 };
 
 export { APIError };

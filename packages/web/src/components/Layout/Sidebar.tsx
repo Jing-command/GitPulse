@@ -9,6 +9,7 @@ import {
   FileText,
   Users,
   Settings,
+  ScrollText,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -38,6 +39,11 @@ const menuItems = [
     path: '/team',
     label: '团队管理',
     icon: Users,
+  },
+  {
+    path: '/logs',
+    label: '系统日志',
+    icon: ScrollText,
   },
   {
     path: '/settings',

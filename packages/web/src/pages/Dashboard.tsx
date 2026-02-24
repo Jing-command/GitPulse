@@ -2,8 +2,8 @@
  * 仪表板页面
  */
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   FolderGit2,
   FileText,
@@ -13,22 +13,9 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  ArrowRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { statsAPI, projectsAPI, commitsAPI } from '../lib/api';
-
-/**
- * 分析任务状态
- */
-interface AnalysisTask {
-  id: string;
-  projectId: string;
-  projectName: string;
-  status: 'running' | 'completed' | 'failed';
-  message: string;
-  createdAt: Date;
-}
 
 /**
  * Dashboard 页面
@@ -61,51 +48,91 @@ function Dashboard() {
   // 分析代码弹窗状态
   const [showAnalyzeModal, setShowAnalyzeModal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // 分析任务列表
-  const [tasks, setTasks] = useState<AnalysisTask[]>([]);
+  // 分析进度弹窗状态
+  const [analysisProgress, setAnalysisProgress] = useState<{
+    isOpen: boolean;
+    projectId: string;
+    projectName: string;
+    status: 'running' | 'completed' | 'failed';
+    message: string;
+    progress: number;
+    analyzedCount: number;
+    totalCount: number;
+    startTime: Date;
+  } | null>(null);
 
-  // 分析代码 mutation
-  const analyzeMutation = useMutation({
-    mutationFn: (projectId: string) => commitsAPI.analyzeCommits(projectId),
-    onSuccess: (data, projectId) => {
-      const project = projects.find((p: { id: string; name: string }) => p.id === projectId);
-      const newTask: AnalysisTask = {
-        id: data.task_id || `analyze_${Date.now()}`,
-        projectId,
-        projectName: project?.name || '未知项目',
-        status: 'running',
-        message: '分析任务已开始，预计需要 1-2 分钟',
-        createdAt: new Date(),
-      };
-      setTasks(prev => [newTask, ...prev].slice(0, 5)); // 只保留最近5个任务
+  // 轮询跟踪分析进度
+  useEffect(() => {
+    if (!analysisProgress?.isOpen || analysisProgress.status !== 'running') {
+      return;
+    }
 
-      // 模拟任务完成（实际应该通过 WebSocket 或轮询获取状态）
-      setTimeout(() => {
-        setTasks(prev =>
-          prev.map(task =>
-            task.projectId === projectId && task.status === 'running'
-              ? { ...task, status: 'completed', message: '分析完成！' }
-              : task
-          )
+    let consecutiveNoChange = 0;
+    let lastAnalyzedCount = 0;
+    // 记录开始分析时已有的 commits 数量（作为基准）
+    const initialAnalyzedCount = analysisProgress.analyzedCount;
+
+    const interval = setInterval(async () => {
+      try {
+        // 获取当前 commits 数量
+        const response = await commitsAPI.getCommits(analysisProgress.projectId, 1, 1);
+        const currentTotal = response.total || 0;
+
+        // 获取已分析的 commits（带有 summary 的）
+        const analyzedResponse = await commitsAPI.getCommits(analysisProgress.projectId, 1, 100);
+        const totalAnalyzedCount = analyzedResponse.items.filter(
+          (c: { summary?: unknown }) => c.summary && Object.keys(c.summary as object).length > 0
+        ).length;
+
+        // 计算本次分析新增的数量
+        const analyzedCount = Math.max(0, totalAnalyzedCount - initialAnalyzedCount);
+
+        // 判断是否还有变化
+        if (analyzedCount === lastAnalyzedCount) {
+          consecutiveNoChange++;
+        } else {
+          consecutiveNoChange = 0;
+          lastAnalyzedCount = analyzedCount;
+        }
+
+        // 更新进度 - 基于本次分析新增的 commits 计算
+        const total = Math.max(analysisProgress.totalCount, currentTotal);
+        const progress = total > 0 ? Math.min(100, Math.round((analyzedCount / total) * 100)) : 0;
+
+        setAnalysisProgress(prev =>
+          prev ? {
+            ...prev,
+            analyzedCount,
+            totalCount: total,
+            progress,
+            message: `正在分析代码... (${analyzedCount}/${total})`,
+          } : null
         );
-        // 刷新统计数据
-        queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
-      }, 3000);
-    },
-    onError: (error: Error, projectId) => {
-      const project = projects.find((p: { id: string; name: string }) => p.id === projectId);
-      const newTask: AnalysisTask = {
-        id: `analyze_${Date.now()}`,
-        projectId,
-        projectName: project?.name || '未知项目',
-        status: 'failed',
-        message: error.message || '分析失败',
-        createdAt: new Date(),
-      };
-      setTasks(prev => [newTask, ...prev].slice(0, 5));
-    },
-  });
+
+        // 如果连续 3 次没有变化（约 9 秒），认为分析完成
+        if (consecutiveNoChange >= 3) {
+          setAnalysisProgress(prev =>
+            prev ? {
+              ...prev,
+              status: 'completed',
+              message: '分析完成！',
+              progress: 100,
+            } : null
+          );
+          setIsAnalyzing(false);
+          // 刷新统计数据
+          queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error('获取分析进度失败:', err);
+      }
+    }, 3000); // 每 3 秒检查一次
+
+    return () => clearInterval(interval);
+  }, [analysisProgress?.isOpen, analysisProgress?.status, analysisProgress?.projectId, analysisProgress?.totalCount, queryClient]);
 
   // 处理分析代码点击
   const handleAnalyzeClick = () => {
@@ -118,15 +145,61 @@ function Dashboard() {
   };
 
   // 处理开始分析
-  const handleStartAnalyze = () => {
+  const handleStartAnalyze = async () => {
     if (!selectedProjectId) return;
-    analyzeMutation.mutate(selectedProjectId);
-    setShowAnalyzeModal(false);
-  };
 
-  // 处理查看结果
-  const handleViewResults = (projectId: string) => {
-    navigate(`/projects?id=${projectId}`);
+    setIsAnalyzing(true);
+    setShowAnalyzeModal(false);
+
+    try {
+      // 获取项目名称
+      const project = projects.find((p: { id: string; name: string }) => p.id === selectedProjectId);
+      const projectName = project?.name || '未知项目';
+
+      // 从 localStorage 加载 AI 配置
+      const savedConfig = localStorage.getItem('gitpulse-ai-config');
+      let aiConfig = null;
+      if (savedConfig) {
+        try {
+          const parsed = JSON.parse(savedConfig);
+          aiConfig = {
+            provider: parsed.provider || 'yunwu',
+            model: parsed.model || 'gemini-2.0-flash-exp',
+            apiKey: parsed.apiKey,
+            baseUrl: parsed.baseUrl || 'https://api.yunwu.ai/v1',
+          };
+        } catch {
+          console.error('解析 AI 配置失败');
+        }
+      }
+
+      // 启动分析前，先获取当前的 commits 数量作为基准
+      const initialCommitsResponse = await commitsAPI.getCommits(selectedProjectId, 1, 1);
+      const initialCount = initialCommitsResponse.total || 0;
+
+      // 启动分析任务
+      await commitsAPI.analyzeCommits(selectedProjectId, {
+        incremental: false,
+        aiConfig: aiConfig || undefined,
+      });
+
+      // 打开进度弹窗
+      setAnalysisProgress({
+        isOpen: true,
+        projectId: selectedProjectId,
+        projectName,
+        status: 'running',
+        message: '正在分析代码...',
+        progress: 0,
+        analyzedCount: 0,
+        totalCount: initialCount > 0 ? initialCount : 20,
+        startTime: new Date(),
+      });
+    } catch (err) {
+      console.error('启动分析失败:', err);
+      alert('启动分析失败，请重试');
+      setIsAnalyzing(false);
+    }
   };
 
   // 处理跳转到项目管理
@@ -251,50 +324,6 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* 分析任务状态 */}
-        {tasks.length > 0 && (
-          <div className="card p-6">
-            <h2 className="mb-4 text-lg font-semibold text-foreground">
-              分析任务状态
-            </h2>
-            <div className="space-y-3">
-              {tasks.map(task => (
-                <div
-                  key={task.id}
-                  className="flex items-center justify-between rounded-lg border border-border p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    {task.status === 'running' && (
-                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                    )}
-                    {task.status === 'completed' && (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
-                    )}
-                    {task.status === 'failed' && (
-                      <AlertCircle className="h-5 w-5 text-red-500" />
-                    )}
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {task.projectName}
-                      </p>
-                      <p className="text-sm text-neutral-500">{task.message}</p>
-                    </div>
-                  </div>
-                  {task.status === 'completed' && (
-                    <button
-                      onClick={() => handleViewResults(task.projectId)}
-                      className="flex items-center text-sm text-primary hover:text-primary-600"
-                    >
-                      查看结果
-                      <ArrowRight className="ml-1 h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* 分析代码弹窗 */}
         {showAnalyzeModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -337,10 +366,10 @@ function Dashboard() {
                 </button>
                 <button
                   onClick={handleStartAnalyze}
-                  disabled={analyzeMutation.isPending}
+                  disabled={isAnalyzing}
                   className="btn bg-primary px-4 py-2 text-white hover:bg-primary-600 disabled:opacity-50"
                 >
-                  {analyzeMutation.isPending ? (
+                  {isAnalyzing ? (
                     <>
                       <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                       启动中...
@@ -349,6 +378,103 @@ function Dashboard() {
                     '开始分析'
                   )}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 分析进度弹窗 */}
+        {analysisProgress?.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                  analysisProgress.status === 'completed'
+                    ? 'bg-green-100 text-green-500'
+                    : analysisProgress.status === 'failed'
+                    ? 'bg-red-100 text-red-500'
+                    : 'bg-blue-100 text-blue-500'
+                }`}>
+                  {analysisProgress.status === 'completed' ? (
+                    <CheckCircle className="h-5 w-5" />
+                  ) : analysisProgress.status === 'failed' ? (
+                    <AlertCircle className="h-5 w-5" />
+                  ) : (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  )}
+                </div>
+                <h2 className="text-xl font-semibold text-foreground">
+                  {analysisProgress.status === 'completed'
+                    ? '分析完成'
+                    : analysisProgress.status === 'failed'
+                    ? '分析失败'
+                    : '正在分析代码'}
+                </h2>
+              </div>
+
+              <div className="mt-4">
+                <p className="text-neutral-600">
+                  项目：<strong>{analysisProgress.projectName}</strong>
+                </p>
+                <p className="mt-2 text-sm text-neutral-500">
+                  {analysisProgress.message}
+                </p>
+
+                {/* 进度条 */}
+                <div className="mt-4">
+                  <div className="flex justify-between text-sm text-neutral-500 mb-1">
+                    <span>进度</span>
+                    <span>{analysisProgress.progress}%</span>
+                  </div>
+                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-500 ${
+                        analysisProgress.status === 'completed'
+                          ? 'bg-green-500'
+                          : analysisProgress.status === 'failed'
+                          ? 'bg-red-500'
+                          : 'bg-blue-500'
+                      }`}
+                      style={{ width: `${analysisProgress.progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* 统计信息 */}
+                <div className="mt-4 flex justify-between text-sm text-neutral-500">
+                  <span>已分析：{analysisProgress.analyzedCount} 个 commits</span>
+                  {analysisProgress.status === 'running' && (
+                    <span className="flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      进行中...
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                {analysisProgress.status === 'running' ? (
+                  <button
+                    onClick={() => {
+                      setAnalysisProgress(null);
+                      setIsAnalyzing(false);
+                    }}
+                    className="btn border border-border px-4 py-2 hover:bg-neutral-50"
+                  >
+                    后台运行
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setAnalysisProgress(null);
+                      // 刷新统计数据
+                      queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
+                    }}
+                    className="btn bg-primary px-4 py-2 text-white hover:bg-primary/90"
+                  >
+                    确定
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -13,6 +13,7 @@ import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import { useAuthStore } from './stores/useAuthStore';
+import Logs from './pages/Logs';
 
 /**
  * App 组件
@@ -73,6 +74,9 @@ function App() {
 
         {/* 设置 */}
         <Route path="settings" element={<Settings />} />
+
+        {/* 系统日志 */}
+        <Route path="logs" element={<Logs />} />
       </Route>
 
       {/* 404 页面 */}

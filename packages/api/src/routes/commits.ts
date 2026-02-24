@@ -5,7 +5,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
-import { gitService, DiffParser, ChangeClassifier, AIAnalyzer } from '@gitpulse/core';
+import { gitService, DiffParser, ChangeClassifier, AIAnalyzer, logger } from '@gitpulse/core';
 import type { AIConfig } from '@gitpulse/core';
 import { authMiddleware } from '../middleware/auth.js';
 
@@ -108,9 +108,8 @@ commitsRouter.post(
       }
 
       // 打印原始请求体用于调试
-      console.log('[GitPulse] ========================================');
-      console.log('[GitPulse] 收到分析请求, project_id:', project_id);
-      console.log('[GitPulse] 原始请求体:', JSON.stringify(req.body, null, 2));
+      logger.info('Commits', `收到分析请求, project_id: ${project_id}`);
+      logger.debug('Commits', '原始请求体', req.body);
 
       // 解析请求体，捕获 Zod 验证错误
       let parsedBody;
@@ -129,14 +128,10 @@ commitsRouter.post(
 
       const { from, to, incremental, aiConfig: userAIConfig } = parsedBody;
 
-      console.log('[GitPulse] Zod 解析成功');
-      console.log('[GitPulse] 解析后的 userAIConfig:', userAIConfig ? {
-        provider: userAIConfig.provider,
-        model: userAIConfig.model,
-        apiKey: userAIConfig.apiKey ? userAIConfig.apiKey.slice(0, 4) + '...' + userAIConfig.apiKey.slice(-4) : '未设置',
-        baseUrl: userAIConfig.baseUrl
-      } : 'undefined/null');
-      console.log('[GitPulse] ========================================');
+      logger.info('Commits', 'Zod 解析成功');
+      if (userAIConfig) {
+        logger.info('Commits', `使用用户AI配置: ${userAIConfig.provider}/${userAIConfig.model}`);
+      }
 
       // 获取项目信息
       const project = await prisma.projects.findUnique({
@@ -197,32 +192,24 @@ async function analyzeCommits(
   userAIConfig?: { provider: string; model: string; apiKey: string; baseUrl: string }
 ): Promise<void> {
   try {
-    console.log(`[GitPulse] ========================================`);
-    console.log(`[GitPulse] 开始分析项目 ${projectId} 的 commits`);
-    console.log(`[GitPulse] 仓库地址: ${repoUrl}`);
-    console.log(`[GitPulse] 增量分析: ${incremental ? '是' : '否'}`);
-    console.log(`[GitPulse] 使用用户配置: ${userAIConfig ? '是' : '否'}`);
-    if (userAIConfig) {
-      console.log(`[GitPulse] 用户配置详情:`);
-      console.log(`[GitPulse]   - provider: ${userAIConfig.provider}`);
-      console.log(`[GitPulse]   - model: ${userAIConfig.model}`);
-      console.log(`[GitPulse]   - apiKey: ${userAIConfig.apiKey ? userAIConfig.apiKey.slice(0, 4) + '...' + userAIConfig.apiKey.slice(-4) : '未设置'}`);
-      console.log(`[GitPulse]   - baseUrl: ${userAIConfig.baseUrl}`);
-    }
-    if (from) console.log(`[GitPulse] 起始 commit: ${from}`);
-    if (to) console.log(`[GitPulse] 结束 commit: ${to}`);
-    console.log(`[GitPulse] ========================================`);
+    logger.info('Analyzer', `开始分析项目 ${projectId} 的 commits`, {
+      repoUrl,
+      incremental,
+      hasUserConfig: !!userAIConfig,
+      from,
+      to,
+    });
 
     // 克隆仓库
     const repoPath = await gitService.cloneRepository(repoUrl, projectId);
-    console.log(`[GitPulse] 仓库克隆完成: ${repoPath}`);
+    logger.info('Analyzer', `仓库克隆完成: ${repoPath}`);
 
     // 如果不是增量分析（全量分析），删除该项目已有的所有 commits 数据
     if (!incremental) {
       const deleteResult = await prisma.commits.deleteMany({
         where: { project_id: projectId },
       });
-      console.log(`[GitPulse] 全量分析，已删除 ${deleteResult.count} 条旧数据`);
+      logger.info('Analyzer', `全量分析，已删除 ${deleteResult.count} 条旧数据`);
     }
 
     // 如果是增量分析，获取上次分析的最后一个 commit
@@ -234,13 +221,13 @@ async function analyzeCommits(
       });
       if (lastCommit) {
         startFrom = lastCommit.hash;
-        console.log(`[GitPulse] 增量分析，从 ${startFrom} 开始`);
+        logger.info('Analyzer', `增量分析，从 ${startFrom} 开始`);
       }
     }
 
     // 获取 commits
     const commits = await gitService.getCommits(repoPath, startFrom, to);
-    console.log(`[GitPulse] 获取到 ${commits.length} 个 commits`);
+    logger.info('Analyzer', `获取到 ${commits.length} 个 commits`);
 
     // 分析每个 commit
     const diffParser = new DiffParser();
@@ -250,7 +237,7 @@ async function analyzeCommits(
     const aiConfig = loadAIConfig(userAIConfig);
     const aiAnalyzer = aiConfig ? new AIAnalyzer(aiConfig) : null;
     if (aiAnalyzer && aiConfig) {
-      console.log(`[GitPulse] AI 分析器已启用: ${aiConfig.provider} (${aiConfig.model})`);
+      logger.info('Analyzer', `AI 分析器已启用: ${aiConfig.provider} (${aiConfig.model})`);
     }
 
     let analyzedCount = 0;
@@ -266,7 +253,7 @@ async function analyzeCommits(
         });
 
         if (existing) {
-          console.log(`[GitPulse] Commit ${commit.hash.substring(0, 8)} 已存在，跳过`);
+          logger.debug('Analyzer', `Commit ${commit.hash.substring(0, 8)} 已存在，跳过`);
           skippedCount++;
           continue;
         }
@@ -274,7 +261,7 @@ async function analyzeCommits(
         // AI 分析时添加延迟，避免触发 API 频率限制
         if (aiAnalyzer && i > 0) {
           const delay = 2000; // 每个 commit 之间等待 2 秒
-          console.log(`[GitPulse] 等待 ${delay}ms 以避免 API 频率限制...`);
+          logger.debug('Analyzer', `等待 ${delay}ms 以避免 API 频率限制`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
 
@@ -294,17 +281,17 @@ async function analyzeCommits(
         let aiSummary = null;
         if (aiAnalyzer) {
           try {
-            console.log(`[GitPulse] 正在使用 AI 分析 commit ${commit.hash.substring(0, 8)}...`);
+            logger.info('Analyzer', `正在使用 AI 分析 commit ${commit.hash.substring(0, 8)}`);
             const fileChangesSimple = fileChanges.map(f => ({
               path: f.path,
               type: f.type,
             }));
             aiSummary = await aiAnalyzer.analyze(commit.message, diffOutput, fileChangesSimple);
             if (aiSummary) {
-              console.log(`[GitPulse] AI 分析完成: ${aiSummary.summary}`);
+              logger.info('Analyzer', `AI 分析完成: ${aiSummary.summary}`);
             }
           } catch (aiError) {
-            console.error(`[GitPulse] AI 分析失败，使用本地分析结果:`, aiError);
+            logger.error('Analyzer', `AI 分析失败: ${commit.hash.substring(0, 8)}`, { error: String(aiError) });
           }
         }
 
@@ -331,9 +318,23 @@ async function analyzeCommits(
           }),
         };
 
-        // 保存到数据库
-        await prisma.commits.create({
-          data: {
+        // 保存到数据库（使用 upsert 避免竞态条件导致的唯一约束冲突）
+        await prisma.commits.upsert({
+          where: {
+            hash_project_id: {
+              hash: commit.hash,
+              project_id: projectId,
+            },
+          },
+          update: {
+            message: commit.message,
+            author: commit.author,
+            author_email: commit.author_email,
+            timestamp: new Date(commit.date),
+            impact_level: impactLevel,
+            summary: mergedSummary as any,
+          },
+          create: {
             hash: commit.hash,
             message: commit.message,
             author: commit.author,
@@ -345,23 +346,24 @@ async function analyzeCommits(
           },
         });
 
-        console.log(`[GitPulse] ✅ Commit ${commit.hash.substring(0, 8)} 分析完成 ${aiSummary ? '(含AI分析)' : '(仅本地分析)'}`);
+        logger.info('Analyzer', `✅ Commit ${commit.hash.substring(0, 8)} 分析完成 ${aiSummary ? '(含AI分析)' : '(仅本地分析)'}`);
         analyzedCount++;
       } catch (err) {
-        console.error(`[GitPulse] ❌ 分析 commit ${commit.hash} 失败:`, err);
+        logger.error('Analyzer', `❌ 分析 commit ${commit.hash} 失败`, { error: String(err) });
         errorCount++;
       }
     }
 
-    console.log(`[GitPulse] ========================================`);
-    console.log(`[GitPulse] 项目 ${projectId} 分析完成`);
-    console.log(`[GitPulse] 总计: ${commits.length} 个 commits`);
+    logger.info('Analyzer', `项目 ${projectId} 分析完成`, {
+      total: commits.length,
+      analyzed: analyzedCount,
+      skipped: skippedCount,
+      errors: errorCount,
+    });
     console.log(`[GitPulse] 新分析: ${analyzedCount} 个`);
     console.log(`[GitPulse] 已存在跳过: ${skippedCount} 个`);
-    console.log(`[GitPulse] 失败: ${errorCount} 个`);
-    console.log(`[GitPulse] ========================================`);
   } catch (error) {
-    console.error(`[GitPulse] ❌ 分析项目 ${projectId} 失败:`, error);
+    logger.error('Analyzer', `❌ 分析项目 ${projectId} 失败`, { error: String(error) });
   }
 }
 
@@ -372,12 +374,11 @@ async function analyzeCommits(
 function loadAIConfig(userConfig?: { provider: string; model: string; apiKey: string; baseUrl: string }): AIConfig | null {
   // 优先使用用户配置（来自设置页面）
   if (userConfig?.apiKey) {
-    console.log('[GitPulse] AI 配置检查（使用用户配置）:');
-    console.log(`[GitPulse]   - AI_PROVIDER: ${userConfig.provider}`);
-    console.log(`[GitPulse]   - AI_API_KEY: 已设置 (${userConfig.apiKey.slice(0, 4)}...${userConfig.apiKey.slice(-4)})`);
-    console.log(`[GitPulse]   - AI_BASE_URL: ${userConfig.baseUrl}`);
-    console.log(`[GitPulse]   - AI_MODEL: ${userConfig.model}`);
-    console.log(`[GitPulse] ✅ AI 分析器已配置（来自用户设置）`);
+    logger.info('AIConfig', '使用用户配置', {
+      provider: userConfig.provider,
+      model: userConfig.model,
+      apiKeyConfigured: true,
+    });
 
     return {
       provider: userConfig.provider as AIConfig['provider'],
@@ -393,20 +394,18 @@ function loadAIConfig(userConfig?: { provider: string; model: string; apiKey: st
   const baseUrl = process.env.AI_BASE_URL || 'https://api.yunwu.ai/v1';
   const model = process.env.AI_MODEL || 'gemini-2.0-flash-exp';
 
-  console.log('[GitPulse] AI 配置检查（使用环境变量）:');
-  console.log(`[GitPulse]   - AI_PROVIDER: ${provider}`);
-  console.log(`[GitPulse]   - AI_API_KEY: ${apiKey ? '已设置 (' + apiKey.slice(0, 4) + '...' + apiKey.slice(-4) + ')' : '未设置'}`);
-  console.log(`[GitPulse]   - AI_BASE_URL: ${baseUrl}`);
-  console.log(`[GitPulse]   - AI_MODEL: ${model}`);
+  logger.info('AIConfig', '使用环境变量配置', {
+    provider,
+    model,
+    apiKeyConfigured: !!apiKey,
+  });
 
   if (!apiKey || apiKey === 'your-api-key-here') {
-    console.log('[GitPulse] ⚠️ AI 未配置: AI_API_KEY 未设置或使用了占位符');
-    console.log('[GitPulse] ⚠️ 请在设置页面配置 AI，或在项目根目录创建 .env 文件并设置 AI_API_KEY');
-    console.log('[GitPulse] ⚠️ 分析将只使用本地规则，不会有 AI 深度分析');
+    logger.warn('AIConfig', 'AI 未配置: AI_API_KEY 未设置或使用了占位符');
     return null;
   }
 
-  console.log(`[GitPulse] ✅ AI 分析器已配置 (provider: ${provider})`);
+  logger.info('AIConfig', `AI 分析器已配置 (provider: ${provider})`);
 
   return {
     provider,
@@ -450,23 +449,50 @@ function determineImpactLevel(
 /**
  * 获取 AI 配置状态
  * GET /api/v1/commits/config/status
+ *
+ * 支持前端通过 query 参数传递用户配置，后端合并判断：
+ * - 如果前端传了 apiKey，优先使用前端配置
+ * - 否则检查后端的 env 配置
  */
 commitsRouter.get(
   '/config/status',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const aiConfig = loadAIConfig();
+      // 从 query 参数读取前端配置
+      const userProvider = req.query.provider as string | undefined;
+      const userModel = req.query.model as string | undefined;
+      const userApiKey = req.query.apiKey as string | undefined;
+      const userBaseUrl = req.query.baseUrl as string | undefined;
+
+      // 构建用户配置对象（如果提供了 apiKey）
+      const userConfig = userApiKey
+        ? {
+            provider: userProvider || 'yunwu',
+            model: userModel || 'gemini-2.0-flash-exp',
+            apiKey: userApiKey,
+            baseUrl: userBaseUrl || 'https://api.yunwu.ai/v1',
+          }
+        : undefined;
+
+      // 使用 loadAIConfig 合并判断（优先使用用户配置）
+      const aiConfig = loadAIConfig(userConfig);
+
+      // 确定配置来源
+      const hasUserConfig = !!userConfig?.apiKey;
+      const hasEnvConfig = !!process.env.AI_API_KEY && process.env.AI_API_KEY !== 'your-api-key-here';
 
       res.json({
         code: 0,
         message: 'success',
         data: {
           ai_enabled: !!aiConfig,
-          provider: aiConfig?.provider || process.env.AI_PROVIDER || 'yunwu',
-          model: aiConfig?.model || process.env.AI_MODEL || 'gemini-2.0-flash-exp',
-          base_url: aiConfig?.base_url || process.env.AI_BASE_URL || 'https://api.yunwu.ai/v1',
+          provider: aiConfig?.provider || userConfig?.provider || process.env.AI_PROVIDER || 'yunwu',
+          model: aiConfig?.model || userConfig?.model || process.env.AI_MODEL || 'gemini-2.0-flash-exp',
+          base_url: aiConfig?.base_url || userConfig?.baseUrl || process.env.AI_BASE_URL || 'https://api.yunwu.ai/v1',
           // 不返回 API key 本身，只返回是否配置
           api_key_configured: !!aiConfig,
+          // 标识配置来源：user=前端配置, server=后端环境变量, none=未配置
+          source: hasUserConfig ? 'user' : hasEnvConfig ? 'server' : 'none',
         },
         request_id: Math.random().toString(36).substring(7),
         timestamp: new Date().toISOString(),

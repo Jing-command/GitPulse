@@ -26,3 +26,6 @@ export * from './git-service';
 
 // 类型定义
 export * from './types';
+
+// 日志模块
+export * from './logger';

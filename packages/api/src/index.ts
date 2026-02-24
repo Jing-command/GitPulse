@@ -17,6 +17,7 @@ import { commitsRouter } from './routes/commits.js';
 import { usersRouter } from './routes/users.js';
 import { healthRouter } from './routes/health.js';
 import { statsRouter } from './routes/stats.js';
+import logsRouter from './routes/logs.js';
 
 // 创建 Express 应用
 const app = express();
@@ -28,14 +29,19 @@ app.use(cors({
   credentials: true,
 }));
 
-// 请求限流
+// 请求限流 - 开发环境放宽限制
+const isDev = process.env.NODE_ENV === 'development';
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 分钟
-  max: 100, // 每个 IP 最多 100 个请求
+  max: isDev ? 1000 : 300, // 开发环境 1000 个请求，生产环境 300 个请求
   message: {
     code: 42900,
     message: 'Too many requests',
     user_message: '请求过于频繁，请稍后再试',
+  },
+  skip: (req) => {
+    // 跳过健康检查和日志接口的限流
+    return req.path === '/api/v1/health' || req.path.startsWith('/api/v1/logs');
   },
 });
 app.use(limiter);
@@ -63,6 +69,7 @@ app.get('/', (_req, res) => {
         contents: '/api/v1/contents',
         commits: '/api/v1/commits',
         users: '/api/v1/users',
+        logs: '/api/v1/logs',
       },
     },
     timestamp: new Date().toISOString(),
@@ -77,6 +84,7 @@ app.use('/api/v1/contents', contentsRouter);
 app.use('/api/v1/commits', commitsRouter);
 app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/stats', statsRouter);
+app.use('/api/v1/logs', logsRouter);
 
 // 错误处理
 app.use(notFoundHandler);

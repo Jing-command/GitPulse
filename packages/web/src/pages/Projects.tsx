@@ -178,42 +178,23 @@ function Projects() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
-  // 加载 AI 配置状态（合并后端环境变量和前端 localStorage 配置）
+  // 加载 AI 配置状态
+  // 后端会自动合并前端 localStorage 配置和后端环境变量配置
   useEffect(() => {
     const loadAIConfig = async () => {
       try {
         setAiConfigLoading(true);
 
-        // 检查 localStorage 中的用户配置
-        const savedConfig = localStorage.getItem('gitpulse-ai-config');
-        let userConfig = null;
-        if (savedConfig) {
-          try {
-            const parsed = JSON.parse(savedConfig);
-            if (parsed.apiKey) {
-              userConfig = {
-                provider: parsed.provider || 'yunwu',
-                model: parsed.model || 'gemini-2.0-flash-exp',
-                apiKey: parsed.apiKey,
-                baseUrl: parsed.baseUrl || 'https://api.yunwu.ai/v1',
-              };
-            }
-          } catch {
-            console.error('解析本地 AI 配置失败');
-          }
-        }
+        // 获取配置状态（API 会自动从 localStorage 读取并合并）
+        const status = await commitsAPI.getAIConfigStatus();
 
-        // 获取后端环境变量配置状态
-        const serverStatus = await commitsAPI.getAIConfigStatus();
-
-        // 合并状态：如果用户配置了或后端配置了，都认为 AI 已启用
         setAiConfigStatus({
-          ai_enabled: serverStatus.ai_enabled || !!userConfig,
-          provider: userConfig?.provider || serverStatus.provider,
-          model: userConfig?.model || serverStatus.model,
-          base_url: userConfig?.baseUrl || serverStatus.base_url,
-          api_key_configured: serverStatus.api_key_configured || !!userConfig,
-          source: userConfig ? 'user' : serverStatus.ai_enabled ? 'server' : 'none',
+          ai_enabled: status.ai_enabled,
+          provider: status.provider,
+          model: status.model,
+          base_url: status.base_url,
+          api_key_configured: status.api_key_configured,
+          source: status.source,
         });
       } catch (err) {
         console.error('获取 AI 配置状态失败:', err);
@@ -389,6 +370,8 @@ function Projects() {
 
     let consecutiveNoChange = 0;
     let lastAnalyzedCount = 0;
+    // 记录开始分析时已有的 commits 数量（作为基准）
+    const initialAnalyzedCount = analysisProgress.analyzedCount;
 
     const interval = setInterval(async () => {
       try {
@@ -398,9 +381,12 @@ function Projects() {
 
         // 获取已分析的 commits（带有 summary 的）
         const analyzedResponse = await commitsAPI.getCommits(analysisProgress.projectId, 1, 100);
-        const analyzedCount = analyzedResponse.items.filter(
+        const totalAnalyzedCount = analyzedResponse.items.filter(
           (c: { summary?: unknown }) => c.summary && Object.keys(c.summary as object).length > 0
         ).length;
+
+        // 计算本次分析新增的数量
+        const analyzedCount = Math.max(0, totalAnalyzedCount - initialAnalyzedCount);
 
         // 判断是否还有变化
         if (analyzedCount === lastAnalyzedCount) {
@@ -410,7 +396,7 @@ function Projects() {
           lastAnalyzedCount = analyzedCount;
         }
 
-        // 更新进度
+        // 更新进度 - 基于本次分析新增的 commits 计算
         const total = Math.max(analysisProgress.totalCount, currentTotal);
         const progress = total > 0 ? Math.min(100, Math.round((analyzedCount / total) * 100)) : 0;
 
@@ -574,18 +560,12 @@ function Projects() {
       // 显示成功提示
       alert(result.message || '同步任务已启动');
 
-      // 轮询等待同步完成（最多等待10秒）
-      let attempts = 0;
-      const maxAttempts = 10;
-      const pollInterval = setInterval(async () => {
-        attempts++;
+      // 等待2秒后刷新一次，让后台同步任务完成
+      setTimeout(async () => {
         await loadProjectDetail(selectedProject);
         setLastSyncTime(new Date());
-
-        if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-        }
-      }, 1000);
+        setSyncing(false);
+      }, 2000);
     } catch (err) {
       console.error('同步失败:', err);
       if (err instanceof APIError) {
@@ -593,7 +573,6 @@ function Projects() {
       } else {
         alert('同步任务启动失败，请重试');
       }
-    } finally {
       setSyncing(false);
     }
   };
@@ -1118,10 +1097,13 @@ function Projects() {
               ) : (
                 <button
                   onClick={() => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const currentProject: any = selectedProject;
+                    const projectId = analysisProgress?.projectId;
                     setAnalysisProgress(null);
                     // 刷新项目数据
-                    if (selectedProject?.id === analysisProgress.projectId) {
-                      loadProjectDetail(selectedProject);
+                    if (projectId && currentProject?.id === projectId) {
+                      loadProjectDetail(currentProject as Project);
                     }
                     // 刷新项目列表
                     queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -1378,7 +1360,7 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
       {/* 代码质量和影响范围 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         {/* 代码质量 */}
-        {summary.codeQuality && (
+        {summary.codeQuality && typeof summary.codeQuality === 'object' && (
           <div className="rounded-lg bg-white/60 p-3">
             <div className="flex items-center gap-2 mb-2">
               <BarChart3 className="h-4 w-4 text-neutral-500" />
@@ -1391,10 +1373,10 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
                   <div className="w-16 h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-green-500 rounded-full"
-                      style={{ width: `${(summary.codeQuality.readability / 10) * 100}%` }}
+                      style={{ width: `${((summary.codeQuality.readability ?? 5) / 10) * 100}%` }}
                     />
                   </div>
-                  <span className="text-neutral-700 w-4 text-right">{summary.codeQuality.readability}</span>
+                  <span className="text-neutral-700 w-4 text-right">{summary.codeQuality.readability ?? 5}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs">
@@ -1403,10 +1385,10 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
                   <div className="w-16 h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-yellow-500 rounded-full"
-                      style={{ width: `${(summary.codeQuality.complexity / 10) * 100}%` }}
+                      style={{ width: `${((summary.codeQuality.complexity ?? 5) / 10) * 100}%` }}
                     />
                   </div>
-                  <span className="text-neutral-700 w-4 text-right">{summary.codeQuality.complexity}</span>
+                  <span className="text-neutral-700 w-4 text-right">{summary.codeQuality.complexity ?? 5}</span>
                 </div>
               </div>
               {riskConfig && (
@@ -1423,7 +1405,7 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
         )}
 
         {/* 影响范围 */}
-        {summary.impactScope && (
+        {summary.impactScope && typeof summary.impactScope === 'object' && (
           <div className="rounded-lg bg-white/60 p-3">
             <div className="flex items-center gap-2 mb-2">
               <Cpu className="h-4 w-4 text-neutral-500" />
@@ -1431,7 +1413,7 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
             </div>
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(summary.impactScope).map(([key, value]) => {
-                if (key === 'others' || !value) return null;
+                if (key === 'others' || !value || typeof value !== 'boolean') return null;
                 const Icon = impactScopeIcons[key];
                 return (
                   <span
@@ -1443,7 +1425,7 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
                   </span>
                 );
               })}
-              {summary.impactScope.others?.map((other, idx) => (
+              {Array.isArray(summary.impactScope.others) && summary.impactScope.others.map((other, idx) => (
                 <span
                   key={idx}
                   className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-600"
@@ -1464,12 +1446,14 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
             <span className="text-xs font-medium text-red-700">潜在风险</span>
           </div>
           <ul className="space-y-1">
-            {summary.aiRisks.map((risk, idx) => (
-              <li key={idx} className="text-xs text-red-600 flex items-start gap-1.5">
-                <span className="mt-1 h-1 w-1 rounded-full bg-red-400 flex-shrink-0" />
-                {risk}
-              </li>
-            ))}
+            {summary.aiRisks
+              .filter((risk): risk is string => typeof risk === 'string')
+              .map((risk, idx) => (
+                <li key={idx} className="text-xs text-red-600 flex items-start gap-1.5">
+                  <span className="mt-1 h-1 w-1 rounded-full bg-red-400 flex-shrink-0" />
+                  {risk}
+                </li>
+              ))}
           </ul>
         </div>
       )}
@@ -1482,12 +1466,14 @@ function CommitAnalysisDetail({ summary }: { summary?: Commit['summary'] }) {
             <span className="text-xs font-medium text-green-700">改进建议</span>
           </div>
           <ul className="space-y-1">
-            {summary.aiSuggestions.map((suggestion, idx) => (
-              <li key={idx} className="text-xs text-green-600 flex items-start gap-1.5">
-                <span className="mt-1 h-1 w-1 rounded-full bg-green-400 flex-shrink-0" />
-                {suggestion}
-              </li>
-            ))}
+            {summary.aiSuggestions
+              .filter((suggestion): suggestion is string => typeof suggestion === 'string')
+              .map((suggestion, idx) => (
+                <li key={idx} className="text-xs text-green-600 flex items-start gap-1.5">
+                  <span className="mt-1 h-1 w-1 rounded-full bg-green-400 flex-shrink-0" />
+                  {suggestion}
+                </li>
+              ))}
           </ul>
         </div>
       )}
