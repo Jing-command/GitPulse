@@ -27,6 +27,7 @@ model users {
   projects      project_members[]
   contents      contents[]
   approvals     approvals[]
+  settings      user_settings?
 
   @@index([email])
   @@index([oauth_provider, oauth_id])
@@ -181,4 +182,21 @@ model contexts {
   @@unique([project_id, type])
   @@index([project_id])
   @@map("contexts")
+}
+
+// 用户设置表 - 存储加密的 AI 配置等敏感信息
+model user_settings {
+  id           String   @id @default(cuid())
+  user_id      String   @unique
+  // 加密后的 AI 配置 JSON
+  // { provider, model, apiKeyEncrypted, baseUrl }
+  ai_config    Json?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // 关联关系
+  user         users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("user_settings")
 }

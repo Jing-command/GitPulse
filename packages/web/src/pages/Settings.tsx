@@ -2,7 +2,7 @@
  * 设置页面
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Save,
   Bell,
@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
+import { settingsAPI } from '@/lib/api';
 
 /**
  * 设置标签页类型
@@ -144,56 +145,82 @@ interface AIConfigData {
 }
 
 /**
- * 从 localStorage 加载 AI 配置
+ * 默认 AI 配置
  */
-function loadAIConfig(): AIConfigData {
-  const saved = localStorage.getItem('gitpulse-ai-config');
-  if (saved) {
-    try {
-      return JSON.parse(saved);
-    } catch {
-      // 解析失败时使用默认值
-    }
-  }
-  return {
-    provider: 'yunwu',
-    model: 'gemini-3-flash-preview',
-    apiKey: 'sk-uFeF7zgtzWOjv0qc26B2T9hjG5f3b9QqwQafLglsxiLI4kA2',
-    baseUrl: 'https://api.yunwu.ai/v1',
-    fallback: '',
-    temperature: 0.7,
-  };
-}
-
-/**
- * 保存 AI 配置到 localStorage
- */
-function saveAIConfig(config: AIConfigData) {
-  localStorage.setItem('gitpulse-ai-config', JSON.stringify(config));
-}
+const defaultAIConfig: AIConfigData = {
+  provider: 'yunwu',
+  model: 'gemini-3-flash-preview',
+  apiKey: '',
+  baseUrl: 'https://api.yunwu.ai/v1',
+  fallback: '',
+  temperature: 0.7,
+};
 
 /**
  * AI 配置组件
  */
 function AISettings() {
-  const [config, setConfig] = useState<AIConfigData>(loadAIConfig());
+  const [config, setConfig] = useState<AIConfigData>(defaultAIConfig);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // 从后端加载配置
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        setLoading(true);
+
+        // 清理旧的 localStorage 配置（已废弃，现使用后端加密存储）
+        const oldConfig = localStorage.getItem('gitpulse-ai-config');
+        if (oldConfig) {
+          localStorage.removeItem('gitpulse-ai-config');
+          console.log('[GitPulse] 已清理旧的本地配置，AI 配置现使用后端加密存储');
+        }
+
+        const data = await settingsAPI.getAIConfig();
+        if (data) {
+          setConfig(prev => ({
+            ...prev,
+            provider: data.provider || 'yunwu',
+            model: data.model || 'gemini-3-flash-preview',
+            apiKey: data.apiKey || '',
+            baseUrl: data.baseUrl || 'https://api.yunwu.ai/v1',
+          }));
+        }
+      } catch (err) {
+        console.error('加载 AI 配置失败:', err);
+        setError('加载配置失败，请刷新页面重试');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadConfig();
+  }, []);
 
   const handleChange = (field: keyof AIConfigData, value: string | number) => {
     setConfig(prev => ({ ...prev, [field]: value }));
     setSaveSuccess(false);
+    setError(null);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setError(null);
     try {
-      // 模拟API调用延迟
-      await new Promise(resolve => setTimeout(resolve, 500));
-      saveAIConfig(config);
+      await settingsAPI.saveAIConfig({
+        provider: config.provider,
+        model: config.model,
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+      });
       setSaveSuccess(true);
       // 3秒后隐藏成功提示
       setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('保存 AI 配置失败:', err);
+      setError('保存失败，请检查网络连接后重试');
     } finally {
       setSaving(false);
     }
@@ -305,6 +332,13 @@ function AISettings() {
           </div>
         </div>
 
+        {/* 错误提示 */}
+        {error && (
+          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
         {/* 保存按钮 */}
         <div className="flex items-center justify-end gap-4 border-t border-border pt-6">
           {saveSuccess && (
@@ -315,11 +349,11 @@ function AISettings() {
           )}
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loading}
             className="btn bg-primary px-6 py-2 text-white hover:bg-primary-600 disabled:opacity-50"
           >
             <Save className={`mr-2 h-4 w-4 ${saving ? 'animate-spin' : ''}`} />
-            {saving ? '保存中...' : '保存设置'}
+            {saving ? '保存中...' : loading ? '加载中...' : '保存设置'}
           </button>
         </div>
       </div>

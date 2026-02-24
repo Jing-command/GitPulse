@@ -156,31 +156,13 @@ function Dashboard() {
       const project = projects.find((p: { id: string; name: string }) => p.id === selectedProjectId);
       const projectName = project?.name || '未知项目';
 
-      // 从 localStorage 加载 AI 配置
-      const savedConfig = localStorage.getItem('gitpulse-ai-config');
-      let aiConfig = null;
-      if (savedConfig) {
-        try {
-          const parsed = JSON.parse(savedConfig);
-          aiConfig = {
-            provider: parsed.provider || 'yunwu',
-            model: parsed.model || 'gemini-2.0-flash-exp',
-            apiKey: parsed.apiKey,
-            baseUrl: parsed.baseUrl || 'https://api.yunwu.ai/v1',
-          };
-        } catch {
-          console.error('解析 AI 配置失败');
-        }
-      }
-
       // 启动分析前，先获取当前的 commits 数量作为基准
       const initialCommitsResponse = await commitsAPI.getCommits(selectedProjectId, 1, 1);
       const initialCount = initialCommitsResponse.total || 0;
 
-      // 启动分析任务
+      // 启动分析任务（AI 配置从后端数据库自动读取）
       await commitsAPI.analyzeCommits(selectedProjectId, {
         incremental: false,
-        aiConfig: aiConfig || undefined,
       });
 
       // 打开进度弹窗

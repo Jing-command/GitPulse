@@ -520,7 +520,7 @@ export const commitsAPI = {
 
   /**
    * 触发 commit 分析
-   * 自动从 localStorage 读取 AI 配置（如果调用者没有提供）
+   * AI 配置会从后端数据库自动读取
    */
   analyzeCommits: (
     projectId: string,
@@ -528,78 +528,27 @@ export const commitsAPI = {
       from?: string;
       to?: string;
       incremental?: boolean;
-      aiConfig?: {
-        provider: string;
-        model: string;
-        apiKey: string;
-        baseUrl: string;
-      };
     }
-  ) => {
-    // 如果调用者没有提供 aiConfig，尝试从 localStorage 读取
-    let aiConfig = body?.aiConfig;
-    if (!aiConfig) {
-      const savedConfig = localStorage.getItem('gitpulse-ai-config');
-      if (savedConfig) {
-        try {
-          const parsed = JSON.parse(savedConfig);
-          aiConfig = {
-            provider: parsed.provider || 'yunwu',
-            model: parsed.model || 'gemini-2.0-flash-exp',
-            apiKey: parsed.apiKey,
-            baseUrl: parsed.baseUrl || 'https://api.yunwu.ai/v1',
-          };
-        } catch {
-          console.error('[GitPulse] 解析 AI 配置失败');
-        }
-      }
-    }
-
-    const requestBody = {
-      ...body,
-      ...(aiConfig && { aiConfig }),
-    };
-
-    return api.post<{
+  ) =>
+    api.post<{
       task_id: string;
       status: string;
       estimated_time: number;
-    }>(`/api/v1/commits/analyze?project_id=${projectId}`, requestBody);
-  },
+    }>(`/api/v1/commits/analyze?project_id=${projectId}`, body),
 
   /**
    * 获取 AI 配置状态
-   * 自动从 localStorage 读取配置并传递给后端，确保后端正确识别前端配置
+   * 从后端数据库读取用户的 AI 配置
    */
-  getAIConfigStatus: () => {
-    // 从 localStorage 读取配置
-    let queryParams = '';
-    try {
-      const savedConfig = localStorage.getItem('gitpulse-ai-config');
-      if (savedConfig) {
-        const parsed = JSON.parse(savedConfig);
-        if (parsed.apiKey) {
-          const params = new URLSearchParams();
-          params.append('provider', parsed.provider || 'yunwu');
-          params.append('model', parsed.model || 'gemini-2.0-flash-exp');
-          params.append('apiKey', parsed.apiKey);
-          params.append('baseUrl', parsed.baseUrl || 'https://api.yunwu.ai/v1');
-          queryParams = `?${params.toString()}`;
-        }
-      }
-    } catch {
-      console.error('[GitPulse] 解析 AI 配置失败');
-    }
-
-    return api.get<{
+  getAIConfigStatus: () =>
+    api.get<{
       ai_enabled: boolean;
       provider: string;
       model: string;
       base_url: string;
       api_key_configured: boolean;
-      source: 'user' | 'server' | 'none';
-    }>(`/api/v1/commits/config/status${queryParams}`);
-  },
+      source: 'user' | 'none';
+    }>('/api/v1/commits/config/status'),
 };
 
 /**
@@ -716,6 +665,44 @@ export const logsAPI = {
    */
   clearLogs: () =>
     api.post<null>('/api/v1/logs/clear'),
+};
+
+/**
+ * 用户设置 API
+ * 管理 AI 配置等敏感信息（后端加密存储）
+ */
+export const settingsAPI = {
+  /**
+   * 获取 AI 配置
+   */
+  getAIConfig: () =>
+    api.get<{
+      provider: string;
+      model: string;
+      apiKey: string;
+      baseUrl: string;
+    } | null>('/api/v1/settings/ai'),
+
+  /**
+   * 保存 AI 配置
+   */
+  saveAIConfig: (config: {
+    provider: string;
+    model: string;
+    apiKey: string;
+    baseUrl: string;
+  }) =>
+    api.post<{
+      provider: string;
+      model: string;
+      baseUrl: string;
+    }>('/api/v1/settings/ai', config),
+
+  /**
+   * 删除 AI 配置
+   */
+  deleteAIConfig: () =>
+    api.delete<null>('/api/v1/settings/ai'),
 };
 
 export { APIError };

@@ -178,14 +178,12 @@ function Projects() {
   const [syncing, setSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
-  // 加载 AI 配置状态
-  // 后端会自动合并前端 localStorage 配置和后端环境变量配置
+  // 加载 AI 配置状态（从后端数据库读取用户加密配置）
   useEffect(() => {
     const loadAIConfig = async () => {
       try {
         setAiConfigLoading(true);
 
-        // 获取配置状态（API 会自动从 localStorage 读取并合并）
         const status = await commitsAPI.getAIConfigStatus();
 
         setAiConfigStatus({
@@ -316,31 +314,13 @@ function Projects() {
       const project = projects.find(p => p.id === projectId);
       const projectName = project?.name || '未知项目';
 
-      // 从 localStorage 加载 AI 配置
-      const savedConfig = localStorage.getItem('gitpulse-ai-config');
-      let aiConfig = null;
-      if (savedConfig) {
-        try {
-          const parsed = JSON.parse(savedConfig);
-          aiConfig = {
-            provider: parsed.provider || 'yunwu',
-            model: parsed.model || 'gemini-2.0-flash-exp',
-            apiKey: parsed.apiKey,
-            baseUrl: parsed.baseUrl || 'https://api.yunwu.ai/v1',
-          };
-        } catch {
-          console.error('解析 AI 配置失败');
-        }
-      }
-
       // 启动分析前，先获取当前的 commits 数量作为基准
       const initialCommitsResponse = await commitsAPI.getCommits(projectId, 1, 1);
       const initialCount = initialCommitsResponse.total || 0;
 
-      // 启动分析任务
+      // 启动分析任务（AI 配置从后端数据库自动读取）
       await commitsAPI.analyzeCommits(projectId, {
         incremental: false,
-        aiConfig: aiConfig || undefined,
       });
 
       // 打开进度弹窗

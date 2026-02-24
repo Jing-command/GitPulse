@@ -29,3 +29,6 @@ export * from './types';
 
 // 日志模块
 export * from './logger';
+
+// 加密工具
+export * from './utils/crypto';

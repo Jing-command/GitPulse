@@ -5,7 +5,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
-import { gitService, DiffParser, ChangeClassifier, AIAnalyzer, logger } from '@gitpulse/core';
+import { gitService, DiffParser, ChangeClassifier, AIAnalyzer, logger, decrypt } from '@gitpulse/core';
 import type { AIConfig } from '@gitpulse/core';
 import { authMiddleware } from '../middleware/auth.js';
 
@@ -27,12 +27,6 @@ const analyzeSchema = z.object({
   from: z.string().optional(),
   to: z.string().optional(),
   incremental: z.boolean().default(false),
-  aiConfig: z.object({
-    provider: z.string(),
-    model: z.string(),
-    apiKey: z.string(),
-    baseUrl: z.string().optional().default('https://api.yunwu.ai/v1'),
-  }).optional(),
 });
 
 /**
@@ -126,12 +120,9 @@ commitsRouter.post(
         return;
       }
 
-      const { from, to, incremental, aiConfig: userAIConfig } = parsedBody;
+      const { from, to, incremental } = parsedBody;
 
       logger.info('Commits', 'Zod 解析成功');
-      if (userAIConfig) {
-        logger.info('Commits', `使用用户AI配置: ${userAIConfig.provider}/${userAIConfig.model}`);
-      }
 
       // 获取项目信息
       const project = await prisma.projects.findUnique({
@@ -158,8 +149,8 @@ commitsRouter.post(
         return;
       }
 
-      // 异步执行分析任务，传入用户配置的 AI 配置
-      analyzeCommits(project_id, project.repo_url, from, to, incremental, userAIConfig);
+      // 异步执行分析任务，AI 配置会从数据库读取
+      analyzeCommits(project_id, project.repo_url, from, to, incremental, req.user?.id);
 
       // 立即返回任务已创建响应
       res.json({
@@ -189,13 +180,13 @@ async function analyzeCommits(
   from?: string,
   to?: string,
   incremental?: boolean,
-  userAIConfig?: { provider: string; model: string; apiKey: string; baseUrl: string }
+  userId?: string
 ): Promise<void> {
   try {
     logger.info('Analyzer', `开始分析项目 ${projectId} 的 commits`, {
       repoUrl,
       incremental,
-      hasUserConfig: !!userAIConfig,
+      userId,
       from,
       to,
     });
@@ -233,8 +224,8 @@ async function analyzeCommits(
     const diffParser = new DiffParser();
     const classifier = new ChangeClassifier();
 
-    // 初始化 AI 分析器（优先使用用户配置，否则使用环境变量）
-    const aiConfig = loadAIConfig(userAIConfig);
+    // 从数据库加载用户 AI 配置
+    const aiConfig = await loadUserAIConfig(userId);
     const aiAnalyzer = aiConfig ? new AIAnalyzer(aiConfig) : null;
     if (aiAnalyzer && aiConfig) {
       logger.info('Analyzer', `AI 分析器已启用: ${aiConfig.provider} (${aiConfig.model})`);
@@ -368,51 +359,51 @@ async function analyzeCommits(
 }
 
 /**
- * 加载 AI 配置
- * 优先使用用户配置，如果没有则使用环境变量
+ * 从数据库加载用户 AI 配置
+ * @param userId 用户 ID
+ * @returns AIConfig 或 null
  */
-function loadAIConfig(userConfig?: { provider: string; model: string; apiKey: string; baseUrl: string }): AIConfig | null {
-  // 优先使用用户配置（来自设置页面）
-  if (userConfig?.apiKey) {
+async function loadUserAIConfig(userId?: string): Promise<AIConfig | null> {
+  if (!userId) {
+    logger.warn('AIConfig', 'AI 未配置: 用户未登录');
+    return null;
+  }
+
+  try {
+    const settings = await prisma.user_settings.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!settings?.ai_config) {
+      logger.warn('AIConfig', 'AI 未配置: 请在前端设置页面配置 AI');
+      return null;
+    }
+
+    const config = settings.ai_config as Record<string, string>;
+    if (!config.apiKeyEncrypted) {
+      logger.warn('AIConfig', 'AI 未配置: API Key 为空');
+      return null;
+    }
+
+    // 解密 API Key
+    const apiKey = decrypt(config.apiKeyEncrypted);
+
     logger.info('AIConfig', '使用用户配置', {
-      provider: userConfig.provider,
-      model: userConfig.model,
+      provider: config.provider,
+      model: config.model,
       apiKeyConfigured: true,
     });
 
     return {
-      provider: userConfig.provider as AIConfig['provider'],
-      api_key: userConfig.apiKey,
-      base_url: userConfig.baseUrl,
-      model: userConfig.model,
+      provider: config.provider as AIConfig['provider'],
+      api_key: apiKey,
+      base_url: config.baseUrl,
+      model: config.model,
     };
-  }
-
-  // 回退到环境变量配置
-  const provider = (process.env.AI_PROVIDER || 'yunwu') as AIConfig['provider'];
-  const apiKey = process.env.AI_API_KEY;
-  const baseUrl = process.env.AI_BASE_URL || 'https://api.yunwu.ai/v1';
-  const model = process.env.AI_MODEL || 'gemini-2.0-flash-exp';
-
-  logger.info('AIConfig', '使用环境变量配置', {
-    provider,
-    model,
-    apiKeyConfigured: !!apiKey,
-  });
-
-  if (!apiKey || apiKey === 'your-api-key-here') {
-    logger.warn('AIConfig', 'AI 未配置: AI_API_KEY 未设置或使用了占位符');
+  } catch (error) {
+    logger.error('AIConfig', '加载配置失败', { error: String(error) });
     return null;
   }
-
-  logger.info('AIConfig', `AI 分析器已配置 (provider: ${provider})`);
-
-  return {
-    provider,
-    api_key: apiKey,
-    base_url: baseUrl,
-    model,
-  };
 }
 
 /**
@@ -450,53 +441,62 @@ function determineImpactLevel(
  * 获取 AI 配置状态
  * GET /api/v1/commits/config/status
  *
- * 支持前端通过 query 参数传递用户配置，后端合并判断：
- * - 如果前端传了 apiKey，优先使用前端配置
- * - 否则检查后端的 env 配置
+ * 从数据库读取用户加密的 AI 配置
  */
 commitsRouter.get(
   '/config/status',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      // 从 query 参数读取前端配置
-      const userProvider = req.query.provider as string | undefined;
-      const userModel = req.query.model as string | undefined;
-      const userApiKey = req.query.apiKey as string | undefined;
-      const userBaseUrl = req.query.baseUrl as string | undefined;
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(401).json({
+          code: 10001,
+          message: '未登录',
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
-      // 构建用户配置对象（如果提供了 apiKey）
-      const userConfig = userApiKey
-        ? {
-            provider: userProvider || 'yunwu',
-            model: userModel || 'gemini-2.0-flash-exp',
-            apiKey: userApiKey,
-            baseUrl: userBaseUrl || 'https://api.yunwu.ai/v1',
-          }
-        : undefined;
-
-      // 使用 loadAIConfig 合并判断（优先使用用户配置）
-      const aiConfig = loadAIConfig(userConfig);
-
-      // 确定配置来源
-      const hasUserConfig = !!userConfig?.apiKey;
-      const hasEnvConfig = !!process.env.AI_API_KEY && process.env.AI_API_KEY !== 'your-api-key-here';
-
-      res.json({
-        code: 0,
-        message: 'success',
-        data: {
-          ai_enabled: !!aiConfig,
-          provider: aiConfig?.provider || userConfig?.provider || process.env.AI_PROVIDER || 'yunwu',
-          model: aiConfig?.model || userConfig?.model || process.env.AI_MODEL || 'gemini-2.0-flash-exp',
-          base_url: aiConfig?.base_url || userConfig?.baseUrl || process.env.AI_BASE_URL || 'https://api.yunwu.ai/v1',
-          // 不返回 API key 本身，只返回是否配置
-          api_key_configured: !!aiConfig,
-          // 标识配置来源：user=前端配置, server=后端环境变量, none=未配置
-          source: hasUserConfig ? 'user' : hasEnvConfig ? 'server' : 'none',
-        },
-        request_id: Math.random().toString(36).substring(7),
-        timestamp: new Date().toISOString(),
+      // 从数据库读取用户配置
+      const settings = await prisma.user_settings.findUnique({
+        where: { user_id: userId },
       });
+
+      const hasConfig = settings?.ai_config && (settings.ai_config as Record<string, string>).apiKeyEncrypted;
+
+      if (hasConfig) {
+        const config = settings!.ai_config as Record<string, string>;
+        res.json({
+          code: 0,
+          message: 'success',
+          data: {
+            ai_enabled: true,
+            provider: config.provider || 'yunwu',
+            model: config.model || 'gemini-2.0-flash-exp',
+            base_url: config.baseUrl || 'https://api.yunwu.ai/v1',
+            api_key_configured: true,
+            source: 'user',
+          },
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+      } else {
+        res.json({
+          code: 0,
+          message: 'success',
+          data: {
+            ai_enabled: false,
+            provider: 'yunwu',
+            model: 'gemini-2.0-flash-exp',
+            base_url: 'https://api.yunwu.ai/v1',
+            api_key_configured: false,
+            source: 'none',
+          },
+          request_id: Math.random().toString(36).substring(7),
+          timestamp: new Date().toISOString(),
+        });
+      }
     } catch (error) {
       next(error);
     }

@@ -18,6 +18,7 @@ import { usersRouter } from './routes/users.js';
 import { healthRouter } from './routes/health.js';
 import { statsRouter } from './routes/stats.js';
 import logsRouter from './routes/logs.js';
+import settingsRouter from './routes/settings.js';
 
 // 创建 Express 应用
 const app = express();
@@ -70,6 +71,7 @@ app.get('/', (_req, res) => {
         commits: '/api/v1/commits',
         users: '/api/v1/users',
         logs: '/api/v1/logs',
+        settings: '/api/v1/settings',
       },
     },
     timestamp: new Date().toISOString(),
@@ -85,6 +87,7 @@ app.use('/api/v1/commits', commitsRouter);
 app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/stats', statsRouter);
 app.use('/api/v1/logs', logsRouter);
+app.use('/api/v1/settings', settingsRouter);
 
 // 错误处理
 app.use(notFoundHandler);

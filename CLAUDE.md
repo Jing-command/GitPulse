@@ -152,7 +152,7 @@ Express server with route structure:
 index.ts          # Server entry, middleware setup
 config/           # Environment configuration
 middleware/       # auth.ts, error.ts, logger.ts
-routes/           # Route handlers (auth, projects, contents, commits, users, health)
+routes/           # Route handlers (auth, projects, contents, commits, users, health, logs)
 ```
 
 All API responses follow a standardized format:
@@ -227,32 +227,38 @@ Services:
 - PostgreSQL on port 5432
 - Redis on port 6379
 
+### Logs System
+
+内置内存日志管理器，支持按级别/模块/时间范围查询：
+
+```bash
+# 日志通过 web 界面查看
+# 访问 http://localhost:3000/logs 或点击侧边栏 "系统日志"
+```
+
+日志 API 端点：
+- `GET /api/v1/logs` - 查询日志（支持 level/module/startTime/endTime 过滤）
+- `GET /api/v1/logs/recent?limit=50` - 获取最近日志
+- `GET /api/v1/logs/stats` - 获取日志统计
+- `POST /api/v1/logs/clear` - 清空日志
+
 ### Environment Variables
 
 The API and CLI require certain environment variables:
 
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gitpulse
-OPENAI_API_KEY=           # For OpenAI integration
-ANTHROPIC_API_KEY=        # For Anthropic/Claude integration
 JWT_SECRET=               # For API authentication
 ```
 
-### AI Analysis Configuration
+**注意**：AI 配置不再通过环境变量或 localStorage，而是在后端数据库中加密存储（AES-256-GCM）。请在前端 Settings 页面配置。
 
-AI 分析支持两种配置方式（前端设置优先级高于环境变量）：
-
-**方式 1：前端设置（推荐）**
-- 在设置页面配置 AI 提供商、模型、API Key
-- 配置自动保存到 localStorage，分析时传递给后端
-
-**方式 2：环境变量**
-```bash
-AI_PROVIDER=yunwu                    # 提供商: openai, anthropic, yunwu
-AI_MODEL=gemini-3-flash-preview      # 模型名称
-AI_API_KEY=sk-xxx                    # API Key
-AI_BASE_URL=https://api.yunwu.ai/v1  # API 基础 URL
-```
+**AI 配置安全存储**：
+- 用户在前端 Settings 页面输入的 API Key 通过 HTTPS 发送到后端
+- 后端使用 AES-256-GCM 加密后存储到数据库 `user_settings.ai_config` 字段
+- 加密密钥通过 `ENCRYPTION_KEY` 环境变量设置
+- 生产环境必须设置 `ENCRYPTION_KEY`（64字符十六进制字符串）
+- 生成密钥命令：`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 ## Code Style & Conventions
 
@@ -318,22 +324,6 @@ taskkill /PID <PID> /F
 Get-Process node | Stop-Process -Force
 ```
 
-### AI Analysis Configuration
-
-AI 分析支持两种配置方式（前端设置优先级高于环境变量）：
-
-**方式 1：前端设置（推荐）**
-- 在设置页面配置 AI 提供商、模型、API Key
-- 配置自动保存到 localStorage，分析时传递给后端
-
-**方式 2：环境变量**
-```bash
-AI_PROVIDER=yunwu                    # 提供商: openai, anthropic, yunwu
-AI_MODEL=gemini-3-flash-preview      # 模型名称
-AI_API_KEY=sk-xxx                    # API Key
-AI_BASE_URL=https://api.yunwu.ai/v1  # API 基础 URL
-```
-
 ### Database Schema Changes
 
 - `commits.hash` 已从全局唯一 (`@unique`) 改为组合唯一 (`@@unique([hash, project_id])`)
@@ -352,6 +342,26 @@ const { data, isLoading } = useQuery({
   refetchOnWindowFocus: true, // 切回页面时自动刷新
 });
 ```
+
+### API Rate Limiting
+
+- 开发环境：1000 请求 / 15 分钟
+- 生产环境：300 请求 / 15 分钟
+- 健康检查 (`/health`) 和日志接口 (`/logs`) 跳过限流
+
+### AI Configuration
+
+AI 配置安全存储在后端数据库：
+- 在 Settings 页面配置 AI 提供商、模型、API Key
+- API Key 通过 AES-256-GCM 加密后存储到数据库
+- 不再使用 localStorage 存储敏感信息
+- 不再支持环境变量配置（`AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY` 等已废弃）
+
+默认配置（当用户未设置时）：yunwu / gemini-2.0-flash-exp
+
+**生产环境部署注意**：
+必须设置 `ENCRYPTION_KEY` 环境变量，否则应用会启动失败。
+生成密钥：`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
 ### API Permission Patterns
 
